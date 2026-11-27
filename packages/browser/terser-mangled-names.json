@@ -459,6 +459,7 @@
         "_isLoaded",
         "_isLoading",
         "_isLogsEnabled",
+        "_isOptedOut",
         "_isPageUnloading",
         "_isPatched",
         "_isPaused",

@@ -4983,6 +4983,7 @@ export class PostHog implements PostHogInterface {
         if (!this.is_capturing()) {
             this.logs?._onOptOut()
             this.heatmaps?.discardPending()
+            this.deadClicksAutocapture?.discardPending()
         }
 
         if (this.persistence?._disabled !== persistenceDisabled) {
@@ -5079,6 +5080,7 @@ export class PostHog implements PostHogInterface {
             this._syncCookielessIdentity()
         } else {
             this.heatmaps?.discardPending()
+            this.deadClicksAutocapture?.discardPending()
         }
 
         this.consent.optInOut(true)
@@ -5152,6 +5154,7 @@ export class PostHog implements PostHogInterface {
         // Identity changes must not let queued recorder work flush under the cookieless identity.
         sessionRecording?.dispose({ discardBufferedEvents: true })
         this.heatmaps?.discardPending()
+        this.deadClicksAutocapture?.discardPending()
 
         if (this.get_distinct_id() !== COOKIELESS_SENTINEL_VALUE) {
             this._reset(true, true)

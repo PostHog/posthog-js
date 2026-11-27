@@ -44,6 +44,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             },
             capture: vi.fn(),
             is_capturing: () => true,
+            has_opted_out_capturing: () => false,
         } as unknown as Partial<PostHog> as PostHog
 
         lazyLoadedDeadClicksAutocapture = new LazyLoadedDeadClicksAutocapture(fakeInstance)
@@ -864,6 +865,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by scroll, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -879,6 +881,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by mutation, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -893,6 +896,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click followed by a selection change, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -962,6 +966,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('visibility change shortly after click, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1013,6 +1018,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('a stale shared visibility timestamp from before the click does not mark the click dead', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: -3000,
@@ -1047,6 +1053,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             // rather than flagged dead by the absolute timeout. this is the regression the single
             // shared `_lastVisibilityChange` timestamp used to cause.
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 1000,
@@ -1066,6 +1073,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click that opens a new window (window loses focus shortly after) is suppressed, not a dead click', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1086,6 +1094,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
             // the window at ~1ms, focus returns 10s later, and the click-correlated blur must not be
             // overwritten by the later focus
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 1000,
@@ -1121,6 +1130,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a selection change outside of threshold, dead click', () => {
             document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1166,6 +1176,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a mutation after threshold, dead click', () => {
             document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1210,6 +1221,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by a scroll after threshold, dead click', () => {
             document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1255,6 +1267,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         it('click followed by nothing for too long, dead click', () => {
             document.body.textContent = 'text'
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1299,6 +1312,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
 
         it('click not followed by anything within threshold, rescheduled for next check', () => {
             lazyLoadedDeadClicksAutocapture['_clicks'].push({
+                consentOptedOut: false,
                 node: document.body,
                 originalEvent: { type: 'click' } as MouseEvent,
                 timestamp: 900,
@@ -1323,6 +1337,7 @@ describe('LazyLoadedDeadClicksAutocapture', () => {
         lazyLoadedDeadClicksAutocapture.start(document)
 
         lazyLoadedDeadClicksAutocapture['_clicks'].push({
+            consentOptedOut: false,
             node: document.body,
             originalEvent: { type: 'click' } as MouseEvent,
             timestamp: 900,
