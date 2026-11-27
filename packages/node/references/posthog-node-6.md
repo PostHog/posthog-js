@@ -2953,6 +2953,7 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="set"></a> `$set?` | `PostHogEventProperties` | Properties to set on the person (overrides existing values) |
 | <a id="set_once"></a> `$set_once?` | `PostHogEventProperties` | Properties to set on the person only once (does not override existing values) |
 | <a id="event-1"></a> `event` | `string` | The name of the event |
+| <a id="options-1"></a> `options?` | `object` | Settings that tell PostHog how to process the event, sent apart from its properties. |
 | <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
 | <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
 | <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |

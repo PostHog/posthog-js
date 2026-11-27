@@ -5,6 +5,7 @@ import type {
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
+  PostHogCaptureOptionsWithEventOptions,
   JsonType,
   PostHogRemoteConfig,
   FeatureFlagValue,
@@ -63,6 +64,21 @@ const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolea
 // Events that identify, alias, merge or update a person or group.
 const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
 
+// The person-properties hash of a queued message's distinct id, `$set` and `$set_once`, or null when either isn't an object.
+function sentPersonPropertiesHash(message: PostHogEventProperties): string | null {
+  const properties = (isObject(message.properties) ? message.properties : {}) as PostHogEventProperties
+  const set = properties.$set
+  const setOnce = properties.$set_once
+  if ((!isNullish(set) && !isObject(set)) || (!isNullish(setOnce) && !isObject(setOnce))) {
+    return null
+  }
+  return getPersonPropertiesHash(
+    String(message.distinct_id),
+    set as { [key: string]: JsonType } | undefined,
+    setOnce as { [key: string]: JsonType } | undefined
+  )
+}
+
 /**
  * The PostHog client core without the feature flag getters that `getFeatureFlagResult()`,
  * `getAllFeatureFlags()` and `updateFlags()` replace.
@@ -92,6 +108,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
   // cache for person properties to avoid duplicate $set events
   protected _cachedPersonProperties: string | null = null
+  // The hash a person-properties update being captured records once queued, or null to clear the stored one
+  private _pendingPersonPropertiesHash: string | null | undefined = undefined
 
   constructor(projectToken: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
@@ -495,10 +513,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
         this.reloadFeatureFlags()
 
-        super.identifyStateless(distinctId, allProperties, options)
-
-        // Update the cached person properties hash
-        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+        const newDistinctId = distinctId
+        this._captureWithPersonPropertiesHash(
+          this._surelyProcessesPerson(options)
+            ? getPersonPropertiesHash(newDistinctId, userPropsObj, userPropsOnceObj)
+            : null,
+          () => super.identifyStateless(newDistinctId, allProperties, options)
+        )
       } else if (shouldTransitionToIdentified) {
         // Matching id while still anonymous (e.g. a non-identified bootstrap seeded the same id):
         // upgrade to identified and emit one person-processed $set. There is no anonymous id to
@@ -508,11 +529,14 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const setProps = userPropsObj || {}
         const setOnceProps = userPropsOnceObj || {}
         this.setPersonPropertiesForFlags({ $set: setProps, $set_once: setOnceProps }, false)
-        this.capture('$set', { $set: setProps, $set_once: setOnceProps })
-
-        // The transition event must fire even when an identical property call was cached earlier;
-        // cache only after capture so deduplication cannot suppress it.
-        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+        // The transition event must fire even when an identical property call was cached earlier,
+        // so it skips the duplicate check and only records the hash once queued.
+        this._captureWithPersonPropertiesHash(
+          this._surelyProcessesPerson(options)
+            ? getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+            : null,
+          () => this.capture('$set', { $set: setProps, $set_once: setOnceProps }, options)
+        )
 
         // The identified state itself is not part of the flags request; reload only when the
         // caller supplied properties that can affect flag evaluation.
@@ -522,7 +546,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       } else if (userPropsObj || userPropsOnceObj) {
         // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
         // and if so, send a $set event
-        this.setPersonProperties(userPropsObj, userPropsOnceObj)
+        this.setPersonProperties(userPropsObj, userPropsOnceObj, true, options)
       }
     })
   }
@@ -556,7 +580,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     })
   }
 
-  alias(alias: string): void {
+  alias(alias: string, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (!this._requirePersonProcessing('posthog.alias')) {
         return
@@ -565,7 +589,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       const distinctId = this.getDistinctId()
       const allProperties = this.enrichIdentityProperties({})
 
-      super.aliasStateless(alias, distinctId, allProperties)
+      super.aliasStateless(alias, distinctId, allProperties, options)
     })
   }
 
@@ -1701,11 +1725,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
    *   If a property is previously set, this does not override that value.
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
   setPersonProperties(
     userPropertiesToSet?: { [key: string]: JsonType },
     userPropertiesToSetOnce?: { [key: string]: JsonType },
-    reloadFeatureFlags = true
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
       const isSetEmpty = isNullish(userPropertiesToSet) || isEmptyObject(userPropertiesToSet)
@@ -1719,9 +1745,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const hash = getPersonPropertiesHash(this.getDistinctId(), userPropertiesToSet, userPropertiesToSetOnce)
+      const tracksHash = this._surelyProcessesPerson(options)
 
       // If exactly this $set call has been sent before, don't send it again - determine based on hash of properties
-      if (this._cachedPersonProperties === hash) {
+      if (tracksHash && this._cachedPersonProperties === hash) {
         this._logger.info(
           'A duplicate setPersonProperties call was made with the same properties. It has been ignored.'
         )
@@ -1734,10 +1761,56 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         reloadFeatureFlags
       )
 
-      this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
-
-      this._cachedPersonProperties = hash
+      // An update that may be personless leaves the person unchanged, so it must not suppress the next one.
+      this._captureWithPersonPropertiesHash(tracksHash ? hash : null, () =>
+        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }, options)
+      )
     })
+  }
+
+  /**
+   * Whether an update with these capture options surely processes the person: its
+   * `process_person_profile` option is missing, `null` or the Boolean `true`. Other values are not
+   * parsed, because PostHog decides how to read them. Used to skip a duplicate before capture; the
+   * event as sent decides whether the hash is recorded (see {@link _recordPersonPropertiesHash}).
+   */
+  private _surelyProcessesPerson(options?: PostHogCaptureOptionsWithEventOptions): boolean {
+    const eventOptions: unknown = options?.options
+    const setting: unknown = isObject(eventOptions) ? eventOptions.process_person_profile : undefined
+    return isNullish(setting) || setting === true
+  }
+
+  // Runs `capture`, which captures one person-properties update synchronously, so the update's hash is recorded
+  // or cleared once it is queued. An update that `before_send` drops, or that isn't queued, leaves the hash alone.
+  private _captureWithPersonPropertiesHash(hash: string | null, capture: () => void): void {
+    this._pendingPersonPropertiesHash = hash
+    try {
+      capture()
+    } finally {
+      this._pendingPersonPropertiesHash = undefined
+    }
+  }
+
+  /**
+   * Records the pending hash from the update as sent, after `before_send`, or clears the stored one. The update
+   * surely processes the person when it keeps its name and its distinct id, `$set` and `$set_once`, and its
+   * `process_person_profile` option (or, when that is missing or null, its `$process_person_profile` property)
+   * is missing, null or the Boolean `true`.
+   */
+  private _recordPersonPropertiesHash(
+    captured: { hash: string | null; event: unknown; payloadHash: string | null },
+    sent: PostHogEventProperties
+  ): void {
+    const option = isObject(sent.options) ? (sent.options as PostHogEventProperties).process_person_profile : undefined
+    const properties = (isObject(sent.properties) ? sent.properties : {}) as PostHogEventProperties
+    const setting = isNullish(option) ? properties.$process_person_profile : option
+    const surelyProcessesPerson =
+      captured.hash !== null &&
+      sent.event === captured.event &&
+      (isNullish(setting) || setting === true) &&
+      captured.payloadHash !== null &&
+      sentPersonPropertiesHash(sent) === captured.payloadHash
+    this._cachedPersonProperties = surelyProcessesPerson ? captured.hash : null
   }
 
   /**
@@ -1768,8 +1841,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    *
    * @param propertyNames - The name (or names) of the person properties to remove.
    * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
-  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+  unsetPersonProperties(
+    propertyNames: string | string[],
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
+  ): void {
     this.wrap(() => {
       const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
         (name) => isString(name) && name.length > 0
@@ -1796,7 +1874,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         this.reloadFeatureFlags()
       }
 
-      this.capture('$set', { $unset: names })
+      this.capture('$set', { $unset: names }, options)
 
       // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
       // property is not skipped as a duplicate.
@@ -1813,10 +1891,24 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * queued messages; type is a no-op, while library and library_version are only used as fallbacks
    * for the official properties.$lib and properties.$lib_version fields.
    * CaptureEvent exposes a subset matching the web SDK's
-   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
+   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp, plus options when the event has them.
    * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    // Taken first, so a capture nested in `before_send` never records it.
+    const hash = this._pendingPersonPropertiesHash
+    this._pendingPersonPropertiesHash = undefined
+    // Read before `before_send`, which can change the message in place.
+    const captured =
+      hash === undefined ? undefined : { hash, event: message.event, payloadHash: sentPersonPropertiesHash(message) }
+    const result = this._runBeforeSendOnMessage(message)
+    if (result && captured) {
+      this._recordPersonPropertiesHash(captured, result)
+    }
+    return result
+  }
+
+  private _runBeforeSendOnMessage(message: PostHogEventProperties): PostHogEventProperties | null {
     if (!this._beforeSend) {
       return message
     }
@@ -1832,6 +1924,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       $set_once: props.$set_once as PostHogEventProperties | undefined,
       // Convert timestamp to Date if it's a string (from currentISOTime())
       timestamp: typeof timestamp === 'string' ? new Date(timestamp) : (timestamp as unknown as Date | undefined),
+    }
+    if (message.options !== undefined) {
+      captureEvent.options = message.options as CaptureEvent['options']
     }
 
     const result = this._runBeforeSend(captureEvent)
@@ -1860,6 +1955,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,
+      ...(result.options !== undefined ? { options: result.options as JsonType } : {}),
     }
   }
 

@@ -334,6 +334,16 @@ export type PostHogCaptureOptions = {
   _originatedFromCaptureException?: boolean
 }
 
+/**
+ * Capture options with the event's `options`, as the React Native client accepts them on every
+ * event call. Core reads `options` from this type to decide whether an update processes the person.
+ * @internal
+ */
+export type PostHogCaptureOptionsWithEventOptions = PostHogCaptureOptions & {
+  /** Settings that tell PostHog how to process the event, sent apart from its properties. */
+  options?: { [key: string]: JsonType | undefined }
+}
+
 export type PostHogFetchResponse = {
   status: number
   text: () => Promise<string>
@@ -1026,6 +1036,8 @@ export type CaptureEvent = {
   $set_once?: PostHogEventProperties
   /** Timestamp for the event */
   timestamp?: Date
+  /** Settings that tell PostHog how to process the event, sent apart from its properties. */
+  options?: { [key: string]: JsonType | undefined }
 }
 
 /**

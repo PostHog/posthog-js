@@ -203,6 +203,27 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - `$autocapture` events carry `$process_person_profile` and `$is_identified` like other events, so anonymous autocapture follows `personProfiles: 'identified_only'`. In 4.x they carried neither, and PostHog processed the person.
 - `null` and `undefined` property values are left off events, except inside `$set`, `$set_once` and `$group_set`, where a `null` still clears the property. Array elements keep their positions.
 
+### Per-event options
+
+Settings that tell PostHog how to process an event go in `options`, like posthog-ios 4.0 and posthog-android 4.0. `capture()`, `screen()`, `identify()`, `setPersonProperties()`, `alias()`, `group()`, `groupIdentify()`, `captureException()` and `captureAi()` take them in their options argument:
+
+```ts
+// 4.x
+posthog.capture('signed_up', { $process_person_profile: false })
+
+// 5.0
+posthog.capture('signed_up', {}, { options: { process_person_profile: false } })
+```
+
+| Option                    | Legacy property           |
+| ------------------------- | ------------------------- |
+| `process_person_profile`  | `$process_person_profile` |
+| `cookieless_mode`         | `$cookieless_mode`        |
+| `disable_skew_correction` | `$ignore_sent_at`         |
+| `product_tour_id`         | `$product_tour_id`        |
+
+The legacy properties still work, and an option wins over its property. `before_send` reads and changes options through `event.options`. A hook that returns a new event keeps them unless it sets `options`, and `options: {}` removes the ones passed on the call.
+
 ## AI events
 
 5.0 adds `captureAi()`, which sends `$ai_generation`, `$ai_span`, `$ai_trace`, `$ai_embedding` and other `$ai_` events to PostHog's AI endpoint, which accepts much larger events.

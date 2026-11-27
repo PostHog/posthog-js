@@ -8,6 +8,7 @@ import {
   isNullish,
   isObject,
   isString,
+  eventOptionsAsLegacyProperties,
   PostHogEventProperties,
   PropertyMatchType,
   uuidv7,
@@ -539,7 +540,12 @@ export class ErrorTracking {
       return undefined
     }
 
-    const properties = isObject(queuedEvent.properties) ? (queuedEvent.properties as PostHogEventProperties) : {}
+    const eventProperties = isObject(queuedEvent.properties) ? (queuedEvent.properties as PostHogEventProperties) : {}
+    // The bridge takes no options, so supported options travel as their legacy properties, winning over them as on capture v1.
+    const optionProperties = isObject(queuedEvent.options)
+      ? (eventOptionsAsLegacyProperties(queuedEvent.options as Record<string, unknown>) as PostHogEventProperties)
+      : {}
+    const properties = { ...eventProperties, ...optionProperties }
     const payload = buildFatalExceptionPayload({
       timestamp: isString(queuedEvent.timestamp) ? queuedEvent.timestamp : new Date().toISOString(),
       distinctId: isString(queuedEvent.distinct_id) ? queuedEvent.distinct_id : '',

@@ -4,7 +4,6 @@ import {
   CaptureLogOptions,
   CaptureLogger,
   JsonType,
-  PostHogCaptureOptions,
   PostHogCoreBase,
   PostHogCoreOptions,
   PostHogEventProperties,
@@ -69,6 +68,7 @@ import { version } from './version'
 import { buildAiEventStorage, buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
   PostHogAutocaptureOptions,
+  PostHogCaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogFeatureFlagOptions,
@@ -1336,6 +1336,16 @@ export class PostHog extends PostHogCoreBase {
     )
   }
 
+  protected prepareMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const prepared = super.prepareMessage(message, options)
+    const eventOptions: unknown = options?.options
+    if (eventOptions !== undefined) {
+      // A copy, so a caller changing its object later doesn't change the queued event.
+      prepared.options = isObject(eventOptions) ? { ...eventOptions } : (eventOptions as JsonType)
+    }
+    return prepared
+  }
+
   protected enqueue(type: string, message: any, options?: PostHogCaptureOptions, explicitRoute?: string): void {
     if ((options as CaptureAiOptions | undefined)?._captureAi) {
       this._enqueueAi(type, message, options)
@@ -2512,9 +2522,15 @@ export class PostHog extends PostHogCoreBase {
    * @param groupType The type of group (e.g. 'company', 'team')
    * @param groupKey The unique identifier for the group
    * @param properties Optional properties to set for the group
+   * @param options Optional capture options for the `$groupidentify` event
    */
-  group(groupType: string, groupKey: string, properties?: PostHogEventProperties): void {
-    super.group(groupType, groupKey, properties)
+  group(
+    groupType: string,
+    groupKey: string,
+    properties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.group(groupType, groupKey, properties, options)
 
     // Automatically cache group properties for feature flag evaluation
     if (properties && Object.keys(properties).length > 0) {
@@ -2534,6 +2550,26 @@ export class PostHog extends PostHogCoreBase {
   }
 
   /**
+   * Sends a `$groupidentify` event that sets properties on a group, without associating the
+   * current user's events with it. Use `group()` to do both.
+   *
+   * @public
+   *
+   * @param groupType The type of group (e.g. 'company', 'team')
+   * @param groupKey The unique identifier for the group
+   * @param groupProperties Optional properties to set for the group
+   * @param options Optional capture options for the `$groupidentify` event
+   */
+  groupIdentify(
+    groupType: string,
+    groupKey: string | number,
+    groupProperties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.groupIdentify(groupType, groupKey, groupProperties, options)
+  }
+
+  /**
    * Assigns an alias to the current user.
    *
    * Sometimes, you want to assign multiple distinct IDs to a single user. This is helpful when your primary distinct ID is inaccessible.
@@ -2550,9 +2586,10 @@ export class PostHog extends PostHogCoreBase {
    * @public
    *
    * @param alias The alias to assign to the current user
+   * @param options Optional capture options for the `$create_alias` event
    */
-  alias(alias: string): void {
-    super.alias(alias)
+  alias(alias: string, options?: PostHogCaptureOptions): void {
+    super.alias(alias, options)
   }
 
   /**
@@ -2694,6 +2731,32 @@ export class PostHog extends PostHogCoreBase {
     if (reloadFeatureFlags) {
       this.reloadFeatureFlags()
     }
+  }
+
+  /**
+   * Captures an event.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * posthog.capture('signed_up', { plan: 'pro' })
+   * ```
+   *
+   * @example
+   * ```js
+   * // Tell PostHog not to create or update a person profile for this event
+   * posthog.capture('signed_up', { plan: 'pro' }, { options: { process_person_profile: false } })
+   * ```
+   *
+   * @public
+   *
+   * @param event - The name of the event
+   * @param properties - Optional properties to include with the event
+   * @param options - Optional capture options
+   */
+  capture(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+    super.capture(event, properties, options)
   }
 
   /**
@@ -3294,15 +3357,18 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param {Error} error The error to capture
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
+   * @param hint Optional details about how the error was caught
+   * @param options Optional capture options for the `$exception` event
    * @returns {void}
    */
   captureException(
     error: Error | unknown,
     additionalProperties: PostHogEventProperties = {},
-    hint?: CoreErrorTracking.EventHint
+    hint?: CoreErrorTracking.EventHint,
+    options?: PostHogCaptureOptions
   ): void {
     try {
-      const result = this.captureExceptionInternal(error, additionalProperties, hint)
+      const result = this.captureExceptionInternal(error, additionalProperties, hint, options)
       if (result?.additionalProperties?.$exception_level === 'fatal') {
         void this._eventsStorage.waitForPersist()
         void this._logsStorage.waitForPersist()
@@ -3473,13 +3539,15 @@ export class PostHog extends PostHogCoreBase {
    * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
    *   If a property is previously set, this does not override that value.
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
   setPersonProperties(
     userPropertiesToSet?: { [key: string]: JsonType },
     userPropertiesToSetOnce?: { [key: string]: JsonType },
-    reloadFeatureFlags = true
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
   ): void {
-    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
+    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags, options)
   }
 
   /**
@@ -3492,9 +3560,14 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param propertyNames - The name (or names) of the person properties to remove.
    * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
-  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
-    super.unsetPersonProperties(propertyNames, reloadFeatureFlags)
+  unsetPersonProperties(
+    propertyNames: string | string[],
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.unsetPersonProperties(propertyNames, reloadFeatureFlags, options)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
