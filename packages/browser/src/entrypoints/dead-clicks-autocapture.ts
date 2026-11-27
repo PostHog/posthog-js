@@ -794,6 +794,9 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
         this._clicks = []
 
         for (const click of clicksToCheck) {
+            if (click.consentOptedOut !== this._isOptedOut()) {
+                continue
+            }
             click.mutationDelayMs =
                 click.mutationDelayMs ??
                 (this._lastMutation && click.timestamp <= this._lastMutation
@@ -831,9 +834,6 @@ class LazyLoadedDeadClicksAutocapture implements LazyLoadedDeadClicksAutocapture
             }
 
             if (scrollTimeout || mutationTimeout || absoluteTimeout || selectionChangedTimeout) {
-                if (click.consentOptedOut !== this._isOptedOut()) {
-                    continue
-                }
                 const prefix = deadEventName(click)
                 if (prefix === '$dead_swipe') {
                     if (this._deadSwipesCaptured >= this._config.max_dead_swipes_per_page_load) {

@@ -184,6 +184,16 @@ describe('DeadClicksAutocapture', () => {
                 (ph: PostHog) => ph.opt_in_capturing(),
                 (ph: PostHog) => ph.consent.optInOut(false),
             ],
+            [
+                'another tab opts out across a check and grants consent again',
+                undefined,
+                () => {},
+                (ph: PostHog) => {
+                    ph.consent.optInOut(false)
+                    vi.advanceTimersByTime(1000)
+                    ph.consent.optInOut(true)
+                },
+            ],
         ])('reports only the click made after %s', async (_, cookielessMode, setup, transition) => {
             const beforeSend = vi.fn().mockImplementation((e) => e)
             const instance = await createPosthogInstance(uuidv7(), {
