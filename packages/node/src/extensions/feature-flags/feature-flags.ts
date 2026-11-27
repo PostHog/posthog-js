@@ -1376,7 +1376,9 @@ class FeatureFlagsPoller {
       throw new ClientError('A secretKey or personalApiKey is required to fetch feature flag definitions from PostHog.')
     }
 
-    const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts`
+    // v=2 selects the feed with config version 2 definitions. For a project without them, and on
+    // a server that ignores v, the body is the same.
+    const url = `${this.host}/flags/definitions?token=${this.projectApiKey}&send_cohorts&v=2`
 
     const options = this.getPersonalApiKeyRequestOptions('GET', this.flagsEtag)
 

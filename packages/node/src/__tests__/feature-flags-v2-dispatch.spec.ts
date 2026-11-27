@@ -297,15 +297,6 @@ describe('the config version dispatch', () => {
     expect(value).toBe(outcome === 'evaluated' ? true : undefined)
   })
 
-  it('requests the definitions as before', async () => {
-    const { client, fetch } = setUp({ definitions: definitionsBody([BOOLEAN]) })
-
-    await client.getFeatureFlag('reading-mode', DISTINCT_ID)
-
-    const urls = fetch.mock.calls.map(([url]) => url).filter((url: string) => url.includes('/flags/definitions'))
-    expect(urls).toEqual(['http://example.com/flags/definitions?token=TEST_API_KEY&send_cohorts'])
-  })
-
   it.each([
     ['a boolean', BOOLEAN, true, null],
     ['a string', STRING, 'green', null],
@@ -1041,6 +1032,78 @@ describe('the definition cache', () => {
 
     expect(await client.getFeatureFlag('reading-mode', DISTINCT_ID)).toBe('from-remote')
     expect(remoteCalls()).toBe(1)
+  })
+})
+
+// --- The definitions request -------------------------------------------------------------------
+
+const FEED_ETAG = '"feed-v2"'
+const DEFINITIONS_URL = 'http://example.com/flags/definitions?token=TEST_API_KEY&send_cohorts&v=2'
+
+/**
+ * The definitions service with an unchanged feed: the feed and its ETag, or 304 for a request
+ * that sends that ETag. It records the URL and If-None-Match of each definitions request.
+ */
+function unchangedFeed(feed: Json): {
+  fetch: ReturnType<typeof vi.fn>
+  requests: { url: string; ifNoneMatch: string | undefined }[]
+} {
+  const requests: { url: string; ifNoneMatch: string | undefined }[] = []
+  const fetch = vi.fn(async (url: string, options: any) => {
+    if (!url.includes('/flags/definitions')) {
+      return { status: 200, text: async () => 'ok', json: async () => ({ status: 'ok' }) }
+    }
+    const ifNoneMatch = options?.headers?.['If-None-Match']
+    requests.push({ url, ifNoneMatch })
+    const notModified = ifNoneMatch === FEED_ETAG
+    return {
+      status: notModified ? 304 : 200,
+      headers: { get: (name: string) => (name.toLowerCase() === 'etag' ? FEED_ETAG : null) },
+      text: async () => (notModified ? '' : JSON.stringify(feed)),
+      json: async () => structuredClone(feed),
+    }
+  })
+  return { fetch, requests }
+}
+
+function conditionalClient(
+  feed: Json,
+  options: Partial<PostHogOptions> = {}
+): ReturnType<typeof unchangedFeed> & {
+  client: PostHog
+} {
+  const service = unchangedFeed(feed)
+  const client = new PostHog('TEST_API_KEY', {
+    host: 'http://example.com',
+    personalApiKey: 'phx_test',
+    fetch: service.fetch as any,
+    fetchRetryCount: 0,
+    flushAt: 1000,
+    ...options,
+  })
+  clients.push(client)
+  return { ...service, client }
+}
+
+const readLocally = (client: PostHog, key: string): Promise<unknown> =>
+  client.getFeatureFlag(key, DISTINCT_ID, { onlyEvaluateLocally: true, sendFeatureFlagEvents: false })
+
+describe('the definitions request', () => {
+  it('asks for the version 2 feed on the first load, on every poll and on a reload', async () => {
+    const { client, requests } = conditionalClient(definitionsBody([BOOLEAN]), { featureFlagsPollingInterval: 1000 })
+
+    // Waits for the load the constructor started.
+    await client.reloadFeatureFlags()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(requests).toHaveLength(2)
+    // The 304 kept the config version 2 definition of the first load.
+    expect(await readLocally(client, 'reading-mode')).toBe(true)
+    await client.reloadFeatureFlags()
+
+    expect(requests.map((request) => request.url)).toEqual([DEFINITIONS_URL, DEFINITIONS_URL, DEFINITIONS_URL])
+    expect(requests.map((request) => new URL(request.url).searchParams.getAll('v'))).toEqual([['2'], ['2'], ['2']])
+    expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, FEED_ETAG, FEED_ETAG])
+    expect(await readLocally(client, 'reading-mode')).toBe(true)
   })
 })
 
