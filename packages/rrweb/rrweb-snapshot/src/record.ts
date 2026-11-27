@@ -15,6 +15,7 @@ import snapshot, {
   onceLinkStylesheetUpToDate,
   isStylesheetLink,
   genId,
+  _isBlockedElement,
 } from './snapshot';
 export * from './types';
 export * from './utils';
@@ -43,4 +44,5 @@ export {
   onceLinkStylesheetUpToDate,
   isStylesheetLink,
   genId,
+  _isBlockedElement,
 };

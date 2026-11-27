@@ -28,3 +28,14 @@ export const createId = (): string => {
         return (character === 'x' ? random : (random & 3) | 8).toString(16)
     })
 }
+
+/**
+ * A UUIDv7 that encodes `timestamp`, for session and window IDs, which PostHog sessions and posthog-js require to be
+ * v7. A local primitive, because the shared generator imports `@posthog/core` and reads its own clock.
+ */
+export const createTimeId = (timestamp: number): string => {
+    const time = Number.isFinite(timestamp) ? Math.min(Math.max(Math.floor(timestamp), 0), 0xffff_ffff_ffff) : 0
+    const hex = time.toString(16).padStart(12, '0')
+    // The v4 ID supplies the random bits and the RFC 4122 variant; only the version changes.
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-7${createId().slice(15)}`
+}

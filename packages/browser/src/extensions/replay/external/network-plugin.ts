@@ -41,7 +41,10 @@ export type NetworkData = {
 }
 
 // Internal recorder option, not a user-facing network capture setting. Missing means legacy ordering.
-type NetworkPluginOptions = NetworkRecordOptions & { captureFetchSynchronously?: boolean }
+type NetworkPluginOptions = NetworkRecordOptions & {
+    captureFetchSynchronously?: boolean
+    returnFetchResponseEarly?: boolean
+}
 
 type networkCallback = (data: NetworkData) => void
 
@@ -932,7 +935,7 @@ function initLegacyFetchObserver(
 function initFetchObserver(
     cb: networkCallback,
     win: IWindow,
-    options: Required<NetworkRecordOptions>
+    options: Required<NetworkRecordOptions> & NetworkPluginOptions
 ): listenerHandler {
     if (!options.initiatorTypes.includes('fetch')) {
         return () => {
@@ -1072,8 +1075,15 @@ function initFetchObserver(
                 (error) => ({ status: 'rejected' as const, error })
             )
 
+            const recordTiming = (res?: Response): void => {
+                void captureTiming(res).catch(() => {
+                    // Recording failures must never affect the host fetch or create unhandled rejections.
+                })
+            }
+
             return (async () => {
                 let response: Response | undefined
+                let timingRecordedLater = false
                 try {
                     await requestCapture
                     const result = await fetchResult
@@ -1081,12 +1091,21 @@ function initFetchObserver(
                         throw result.error
                     }
                     response = result.response
+                    if (options.returnFetchResponseEarly === true) {
+                        // Awaiting the body read holds a streamed response until it ends or the read times out.
+                        // captureResponse clones the body before its first await, so the caller can consume it now.
+                        const earlyResponse = response
+                        timingRecordedLater = true
+                        const recordEarlyTiming = (): void => recordTiming(earlyResponse)
+                        void captureResponse(earlyResponse).then(recordEarlyTiming, recordEarlyTiming)
+                        return earlyResponse
+                    }
                     await captureResponse(response)
                     return response
                 } finally {
-                    void captureTiming(response).catch(() => {
-                        // Recording failures must never affect the host fetch or create unhandled rejections.
-                    })
+                    if (!timingRecordedLater) {
+                        recordTiming(response)
+                    }
                 }
             })()
         }

@@ -127,6 +127,15 @@ describe('BrowserClientAdapter', () => {
         )
     })
 
+    it('maps immediate delivery to an instant capture on the normal transport', () => {
+        const instance = createMockPostHog()
+        const client = new BrowserClientAdapter(instance)
+        client.capture('checkout', { step: 1 }, { delivery: 'immediate' })
+        const options = vi.mocked(instance.capture).mock.calls[0]?.[2]
+        expect(options).toMatchObject({ send_instantly: true })
+        expect(options).not.toHaveProperty('transport')
+    })
+
     it('delegates session notifications without reading or creating a session', () => {
         const instance = createMockPostHog()
         const unsubscribe = vi.fn()

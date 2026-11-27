@@ -2,6 +2,7 @@ import {
   getPostHogCookieReadOptions,
   getPostHogCookieValues,
   getPostHogTracingHeaderValues,
+  isPostHogCookieOptedOut,
   sanitizeTracingHeaderValue,
 } from '@/extensions/tracing-headers'
 
@@ -217,6 +218,28 @@ describe('tracing headers', () => {
     it('reads the cookie name posthog-js derives from a token with + / =', () => {
       const cookie = cookieFor({ distinct_id: 'anon', $sesid: [now, 'session', now] }, 'aPLbSLcEQ')
       expect(getPostHogCookieValues(cookie, 'a+b/c=', now)).toEqual({ sessionId: 'session', distinctId: 'anon' })
+    })
+
+    it('returns an anonymous distinct ID only when asked, and marks it', () => {
+      const cookie = cookieFor({ distinct_id: 'anon', $user_state: 'anonymous', $sesid: [now, 'session', now] })
+      expect(getPostHogCookieValues(cookie, 'token', now)).toEqual({ sessionId: 'session' })
+      expect(getPostHogCookieValues(cookie, 'token', now, 30 * minute, false, true)).toEqual({
+        sessionId: 'session',
+        distinctId: 'anon',
+        anonymous: true,
+      })
+    })
+
+    it.each([
+      ['no consent cookie', '', false, false],
+      ['an opt-out', '__ph_opt_in_out_token=0', false, true],
+      ['an opt-in', '__ph_opt_in_out_token=1', false, false],
+      ['no consent cookie when opt-out is the default', '', true, true],
+      ['an opt-in when opt-out is the default', '__ph_opt_in_out_token=1', true, false],
+      ['no Cookie header', undefined, false, false],
+      ['no Cookie header when opt-out is the default', undefined, true, true],
+    ])('reports the consent cookie as opted out with %s', (_, cookie, byDefault, expected) => {
+      expect(isPostHogCookieOptedOut(cookie, 'token', byDefault)).toBe(expected)
     })
   })
 })

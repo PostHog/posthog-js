@@ -4718,7 +4718,14 @@ export class PostHog extends PostHogCoreBase {
       )
     }
 
-    const initialUrl = (await Linking.getInitialURL()) ?? undefined
+    // getInitialURL() rejects on Android when reading the launch intent throws; that must not stop
+    // Application Opened or the AppState listener below from being set up.
+    let initialUrl: string | undefined
+    try {
+      initialUrl = (await Linking.getInitialURL()) ?? undefined
+    } catch (e) {
+      this._logger.warn('Could not read the initial URL for Application Opened:', e)
+    }
 
     this.capture('Application Opened', {
       ...properties,
