@@ -2,7 +2,7 @@ import React from 'react'
 import { Linking, Text, TouchableOpacity, View } from 'react-native'
 
 import { createSafeStyleSheet } from '../safeStyleSheet'
-import { getMaxFontSizeMultiplier, SurveyAppearanceTheme } from '../surveys-utils'
+import { getFontFamily, getMaxFontSizeMultiplier, SurveyAppearanceTheme } from '../surveys-utils'
 
 export function BottomSection({
   text,
@@ -45,7 +45,10 @@ export function BottomSection({
       >
         <Text
           maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'button')}
-          style={[styles.buttonText, { color: appearance.submitButtonTextColor }]}
+          style={[
+            styles.buttonText,
+            { color: appearance.submitButtonTextColor, fontFamily: getFontFamily(appearance) },
+          ]}
         >
           {text}
         </Text>

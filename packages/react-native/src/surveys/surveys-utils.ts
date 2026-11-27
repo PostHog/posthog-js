@@ -9,6 +9,7 @@ import {
   SurveyPosition,
   SurveyQuestionDescriptionContentType,
 } from '@posthog/core'
+import { Platform } from 'react-native'
 
 export type { PropertyFilters, PropertyOperator, SurveyEventWithFilters } from '@posthog/core'
 export {
@@ -109,6 +110,17 @@ export interface SurveyAppearance extends CoreSurveyAppearance {
    * @default undefined (no ceiling)
    */
   maxFontSizeMultiplier?: number | Partial<Record<SurveyTextRole, number>>
+
+  /**
+   * Font family for survey text. Use a font bundled with the app; other names
+   * fall back to the system font. On Android the survey editor's web fonts
+   * (`Georgia`, `Courier New`, ...) use the matching system font.
+   *
+   * `inherit` (the editor's default) or an empty value uses
+   * `defaultSurveyAppearance.fontFamily`, then the system font. `system-ui`
+   * uses the system font.
+   */
+  fontFamily?: string
 }
 
 // textColor and inputTextColor are optional overrides (auto-calculated if not provided)
@@ -125,11 +137,50 @@ export type SurveyAppearanceTheme = Omit<
   | 'inputTextColor'
   | 'placeholder'
   | 'maxFontSizeMultiplier'
+  | 'fontFamily'
 > & {
   textColor?: string
   inputTextColor?: string
   placeholder?: string
   maxFontSizeMultiplier?: SurveyAppearance['maxFontSizeMultiplier']
+  fontFamily?: string
+}
+
+// Web fonts the survey editor offers. Android's system font aliases match these only by lowercase name.
+const ANDROID_WEB_FONTS = [
+  'arial',
+  'verdana',
+  'tahoma',
+  'trebuchet ms',
+  'helvetica',
+  'times new roman',
+  'georgia',
+  'courier new',
+]
+
+/**
+ * The first family of a CSS `font-family` value, without quotes (`"Times New Roman", serif`
+ * gives `Times New Roman`), and whether it means the app's font: empty or `inherit`.
+ */
+export function parseFontFamily(value: unknown): { name: string; inherits: boolean } {
+  const css = typeof value === 'string' ? value.trim() : ''
+  const quote = css[0] === '"' || css[0] === "'" ? css[0] : ''
+  const name = (quote ? css.slice(1).split(quote)[0] : css.split(',')[0]).trim()
+  return { name, inherits: ['', 'inherit'].includes(name.toLowerCase()) }
+}
+
+/**
+ * The font family for survey text, or `undefined` for the system font, which is
+ * what `inherit` and `system-ui` mean here. On Android the editor's web fonts are
+ * lowercased to match the system font aliases.
+ */
+export function getFontFamily(appearance: Pick<SurveyAppearance, 'fontFamily'>): string | undefined {
+  const { name, inherits } = parseFontFamily(appearance.fontFamily)
+  const lower = name.toLowerCase()
+  if (inherits || lower === 'system-ui') {
+    return undefined
+  }
+  return Platform.OS === 'android' && ANDROID_WEB_FONTS.includes(lower) ? lower : name
 }
 
 /**

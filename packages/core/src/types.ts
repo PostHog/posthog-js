@@ -659,6 +659,7 @@ export type SurveyAppearance = {
   introScreenDescriptionContentType?: SurveyQuestionDescriptionContentType
   introScreenButtonText?: string
   borderColor?: string
+  fontFamily?: string
   position?: SurveyPosition
   placeholder?: string
   shuffleQuestions?: boolean

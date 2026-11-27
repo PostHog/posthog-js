@@ -44,6 +44,7 @@ vi.mock('../src/surveys/components/SurveyModal', async () => {
       return R.createElement('div', {
         'data-testid': 'survey-modal',
         'data-survey-id': props.survey.id,
+        'data-font-family': props.appearance?.fontFamily,
         onClick: () => props.onClose(false, {}), // simulate a dismiss (not submitted)
       })
     },
@@ -117,6 +118,34 @@ const flush = async () => {
     await new Promise((r) => setTimeout(r, 0))
   })
 }
+
+describe('PostHogSurveyProvider — survey font', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  it.each([
+    ['inherit', 'Inter'],
+    ['Inherit', 'Inter'],
+    [undefined, 'Inter'],
+    ['', 'Inter'],
+    ['Georgia', 'Georgia'],
+    ['system-ui', 'system-ui'],
+  ])('survey font %j with provider font Inter renders %j', async (surveyFont, expected) => {
+    mockClient = makeClient([{ ...popoverSurvey, appearance: { fontFamily: surveyFont } } as Survey])
+    const { findByTestId } = render(
+      <PostHogSurveyProvider client={mockClient} defaultSurveyAppearance={{ fontFamily: 'Inter' }}>
+        <div />
+      </PostHogSurveyProvider>
+    )
+    await flush()
+    expect((await findByTestId('survey-modal')).getAttribute('data-font-family')).toBe(expected)
+  })
+})
 
 describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
   beforeEach(() => {

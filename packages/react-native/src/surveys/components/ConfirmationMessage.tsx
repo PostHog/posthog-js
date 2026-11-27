@@ -6,6 +6,7 @@ import {
   closeButtonSize,
   defaultDescriptionOpacity,
   getContrastingTextColor,
+  getFontFamily,
   getMaxFontSizeMultiplier,
   shouldRenderDescription,
   SurveyAppearanceTheme,
@@ -31,6 +32,7 @@ export function ConfirmationMessage({
   isModal: boolean
 }): JSX.Element {
   const textColor = getContrastingTextColor(appearance.backgroundColor)
+  const fontFamily = getFontFamily(appearance)
 
   return (
     <View style={styleOverrides}>
@@ -38,7 +40,7 @@ export function ConfirmationMessage({
         {header ? (
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'header')}
-            style={[styles.thankYouMessageHeader, { color: textColor }]}
+            style={[styles.thankYouMessageHeader, { color: textColor, fontFamily }]}
           >
             {header}
           </Text>
@@ -46,7 +48,7 @@ export function ConfirmationMessage({
         {shouldRenderDescription(description, contentType) && (
           <Text
             maxFontSizeMultiplier={getMaxFontSizeMultiplier(appearance, 'description')}
-            style={{ color: textColor, opacity: defaultDescriptionOpacity }}
+            style={{ color: textColor, opacity: defaultDescriptionOpacity, fontFamily }}
           >
             {description}
           </Text>

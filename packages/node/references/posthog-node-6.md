@@ -5852,6 +5852,7 @@ Options accepted by `startSpan` and `withSpan`.
 | <a id="bordercolor"></a> `borderColor?` | `string` |
 | <a id="displayintroscreen"></a> `displayIntroScreen?` | `boolean` |
 | <a id="displaythankyoumessage"></a> `displayThankYouMessage?` | `boolean` |
+| <a id="fontfamily"></a> `fontFamily?` | `string` |
 | <a id="inputbackground"></a> `inputBackground?` | `string` |
 | <a id="inputtextcolor"></a> `inputTextColor?` | `string` |
 | <a id="introscreenbuttontext"></a> `introScreenButtonText?` | `string` |

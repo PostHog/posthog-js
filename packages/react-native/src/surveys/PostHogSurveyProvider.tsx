@@ -11,6 +11,7 @@ import { SurveyModal } from './components/SurveyModal'
 import {
   defaultSurveyAppearance as builtInSurveyAppearance,
   getContrastingTextColor,
+  parseFontFamily,
   SurveyAppearance,
   SurveyAppearanceTheme,
 } from './surveys-utils'
@@ -299,6 +300,10 @@ export function PostHogSurveyProvider(props: PostHogSurveyProviderProps): JSX.El
       ...builtInSurveyAppearance,
       ...defaultSurveyAppearance,
       ...(translatedActiveSurvey.survey.appearance ?? {}),
+      // `inherit` (the survey editor's default) means the app's font
+      ...(parseFontFamily(translatedActiveSurvey.survey.appearance?.fontFamily).inherits && {
+        fontFamily: defaultSurveyAppearance.fontFamily,
+      }),
       // If submitButtonColor is set by PostHog, ensure submitButtonTextColor is also set to contrast
       ...(translatedActiveSurvey.survey.appearance?.submitButtonColor
         ? {
