@@ -1,4 +1,4 @@
-import type { JsonType, PostHogCaptureOptions as CorePostHogCaptureOptions } from '@posthog/core'
+import type { JsonType, PostHogCaptureOptionsWithEventOptions } from '@posthog/core'
 
 /**
  * Settings that tell PostHog how to process one event, sent with the event apart from its
@@ -19,7 +19,7 @@ export type EventOptions = {
 }
 
 /** Options for a call that sends an event, such as `capture()`, `identify()` or `alias()`. */
-export type PostHogCaptureOptions = CorePostHogCaptureOptions & {
+export type PostHogCaptureOptions = PostHogCaptureOptionsWithEventOptions & {
   /** Settings that tell PostHog how to process the event. `before_send` can change them through the event's `options`. */
   options?: EventOptions
 }

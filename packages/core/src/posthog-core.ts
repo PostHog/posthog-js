@@ -5,6 +5,7 @@ import type {
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
+  PostHogCaptureOptionsWithEventOptions,
   JsonType,
   PostHogRemoteConfig,
   FeatureFlagValue,
@@ -1761,8 +1762,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * parsed, because PostHog decides how to read them. Used to skip a duplicate before capture; the
    * event as sent decides whether the hash is recorded (see {@link _recordPersonPropertiesHash}).
    */
-  private _surelyProcessesPerson(options?: PostHogCaptureOptions): boolean {
-    const eventOptions = (options as { options?: unknown } | undefined)?.options
+  private _surelyProcessesPerson(options?: PostHogCaptureOptionsWithEventOptions): boolean {
+    const eventOptions: unknown = options?.options
     const setting: unknown = isObject(eventOptions) ? eventOptions.process_person_profile : undefined
     return isNullish(setting) || setting === true
   }
