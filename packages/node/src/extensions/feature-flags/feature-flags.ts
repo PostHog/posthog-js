@@ -44,6 +44,32 @@ const CONFIG_V2_FLAGS_CACHE_FIELD = 'flags_v2'
 
 type FlagDefinitionCacheDataWithConfigV2 = FlagDefinitionCacheData & { [CONFIG_V2_FLAGS_CACHE_FIELD]?: unknown }
 
+/** The definitions of cache data: `flags`, then the ones of another config version. */
+function definitionsOf(flagData: FlagDefinitionCacheInput): PostHogFeatureFlag[] {
+  const configV2Flags = (flagData as FlagDefinitionCacheDataWithConfigV2)[CONFIG_V2_FLAGS_CACHE_FIELD]
+  return Array.isArray(configV2Flags) ? [...flagData.flags, ...(configV2Flags as PostHogFeatureFlag[])] : flagData.flags
+}
+
+/**
+ * What local evaluation reads from cache data, as JSON with sorted object members, so data that a
+ * cache provider stores in another member order, or under one of the two spellings, is the same.
+ */
+function definitionsFingerprint(flagData: FlagDefinitionCacheInput): string {
+  return JSON.stringify(
+    {
+      flags: definitionsOf(flagData),
+      group_type_mapping: flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {},
+      cohorts: flagData.cohorts,
+      property_matching_version: flagData.property_matching_version ?? flagData.propertyMatchingVersion,
+      minimal_flag_called_events: (flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true,
+    },
+    (_key, value: unknown) =>
+      value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+        : value
+  )
+}
+
 const SIXTY_SECONDS = 60 * 1000
 
 // A definition with no runtime, or one from a server that does not know the field, reports the
@@ -202,6 +228,8 @@ class FeatureFlagsPoller {
   private loadingPromise?: Promise<void>
   private pollerStopped: boolean = false
   private flagsEtag?: string
+  // The cache data of the definitions in use, which a cache read compares with what it installs.
+  private installedDefinitions?: FlagDefinitionCacheInput
   private nextFetchAllowedAt?: number
   private strictLocalEvaluation: boolean
   private flagDefinitionsLoadedAt?: number
@@ -968,11 +996,7 @@ class FeatureFlagsPoller {
   }
 
   private updateFlagState(flagData: FlagDefinitionCacheInput): void {
-    // The cache keeps definitions of another config version apart; evaluation reads them all.
-    const configV2Flags = (flagData as FlagDefinitionCacheDataWithConfigV2)[CONFIG_V2_FLAGS_CACHE_FIELD]
-    const allFlags = Array.isArray(configV2Flags)
-      ? [...flagData.flags, ...(configV2Flags as PostHogFeatureFlag[])]
-      : flagData.flags
+    const allFlags = definitionsOf(flagData)
     const flags = this.filterFlagsByEvaluationContexts(allFlags)
     const featureFlagsByKey = flags.reduce<Record<string, PostHogFeatureFlag>>(
       (acc, curr) => ((acc[curr.key] = curr), acc),
@@ -989,6 +1013,7 @@ class FeatureFlagsPoller {
     this.groupTypeMapping = flagData.group_type_mapping ?? flagData.groupTypeMapping ?? {}
     this.cohorts = flagData.cohorts
     this.propertyMatchingVersion = flagData.property_matching_version ?? flagData.propertyMatchingVersion
+    this.installedDefinitions = flagData
     this.loadedSuccessfullyOnce = true
     // Absence of the field (older cached data, older servers) always means full events.
     this.onMinimalFlagCalledEvents?.((flagData.minimal_flag_called_events ?? flagData.minimalFlagCalledEvents) === true)
@@ -1071,7 +1096,17 @@ class FeatureFlagsPoller {
     try {
       const cached = await this.cacheProvider.getFlagDefinitions()
       if (cached) {
+        // The ETag validates the definitions this client fetched. A 304 for it would keep other
+        // definitions read from the cache, such as the legacy feed an older release wrote, until
+        // the feed changes.
+        const otherDefinitions =
+          this.flagsEtag !== undefined &&
+          (this.installedDefinitions === undefined ||
+            definitionsFingerprint(cached) !== definitionsFingerprint(this.installedDefinitions))
         this.updateFlagState(cached)
+        if (otherDefinitions) {
+          this.flagsEtag = undefined
+        }
         this.logMsgIfDebug(() => console.debug(`[FEATURE FLAGS] ${debugMessage} (${cached.flags.length} flags)`))
         this.onLoad?.(this.featureFlags.length)
         // Warn only about flags this instance actually evaluates locally; context-filtered flags

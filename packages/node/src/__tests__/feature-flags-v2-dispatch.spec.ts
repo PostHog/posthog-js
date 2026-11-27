@@ -955,11 +955,13 @@ describe('flag events of a local config version 2 result', () => {
 
 // --- The definition cache ----------------------------------------------------------------------
 
+/** A cache that other processes may also write. The client fetches only while `fetching` is set. */
 class MemoryCache {
   stored: Json | undefined
+  received = 0
   constructor(
     stored?: Json,
-    private readonly fetching = true
+    public fetching = true
   ) {
     this.stored = stored
   }
@@ -970,6 +972,7 @@ class MemoryCache {
     return this.fetching
   }
   onFlagDefinitionsReceived(data: Json): void {
+    this.received += 1
     this.stored = structuredClone(data)
   }
   shutdown(): void {}
@@ -1104,6 +1107,75 @@ describe('the definitions request', () => {
     expect(requests.map((request) => new URL(request.url).searchParams.getAll('v'))).toEqual([['2'], ['2'], ['2']])
     expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, FEED_ETAG, FEED_ETAG])
     expect(await readLocally(client, 'reading-mode')).toBe(true)
+  })
+
+  it('drops the ETag when the cache installs other definitions', async () => {
+    // A release that does not ask for v=2 writes the legacy feed, without config version 2
+    // flags, to the shared cache. The ETag of the v=2 feed does not describe those
+    // definitions, so a 304 for it must not keep them.
+    const legacy = v1Definition('legacy-shelf')
+    const cache = new MemoryCache()
+    const { client, requests } = conditionalClient(definitionsBody([legacy, BOOLEAN]), {
+      flagDefinitionCacheProvider: cache as any,
+    })
+
+    await client.reloadFeatureFlags()
+    cache.stored = definitionsBody([legacy])
+    cache.fetching = false
+    await client.reloadFeatureFlags()
+    expect(await readLocally(client, 'reading-mode')).toBeUndefined()
+    cache.fetching = true
+    await client.reloadFeatureFlags()
+
+    expect(await readLocally(client, 'reading-mode')).toBe(true)
+    expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, undefined])
+    // The cache gets the whole feed back for the other readers.
+    expect(cache.stored!.flags_v2).toEqual([BOOLEAN])
+  })
+
+  it('keeps the ETag when the cache holds the definitions it fetched', async () => {
+    const cache = new MemoryCache()
+    const { client, requests } = conditionalClient(definitionsBody([v1Definition('legacy-shelf'), BOOLEAN]), {
+      flagDefinitionCacheProvider: cache as any,
+    })
+
+    await client.reloadFeatureFlags()
+    cache.fetching = false
+    await client.reloadFeatureFlags()
+    cache.fetching = true
+    await client.reloadFeatureFlags()
+
+    expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, FEED_ETAG])
+    expect(cache.received).toBe(1)
+    expect(await readLocally(client, 'reading-mode')).toBe(true)
+  })
+
+  it('keeps the ETag when the cache stores the same definitions in another shape', async () => {
+    // A store such as a JSON column may reorder members, and a provider may keep one spelling.
+    const reversed = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(reversed)
+        : value !== null && typeof value === 'object'
+          ? Object.fromEntries(
+              Object.entries(value)
+                .reverse()
+                .map(([key, member]) => [key, reversed(member)])
+            )
+          : value
+    const cache = new MemoryCache()
+    const { client, requests } = conditionalClient(definitionsBody([v1Definition('legacy-shelf'), BOOLEAN]), {
+      flagDefinitionCacheProvider: cache as any,
+    })
+
+    await client.reloadFeatureFlags()
+    const snakeCase = Object.fromEntries(Object.entries(cache.stored!).filter(([key]) => !/[A-Z]/.test(key)))
+    cache.stored = reversed(snakeCase) as Json
+    cache.fetching = false
+    await client.reloadFeatureFlags()
+    cache.fetching = true
+    await client.reloadFeatureFlags()
+
+    expect(requests.map((request) => request.ifNoneMatch)).toEqual([undefined, FEED_ETAG])
   })
 })
 
