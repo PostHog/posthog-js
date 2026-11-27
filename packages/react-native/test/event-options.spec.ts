@@ -233,6 +233,17 @@ describe('per-event options', () => {
     expect(sent.filter(({ event }) => event.event === '$set')).toHaveLength(expectedSets)
   })
 
+  it('sends the options on the $set that identifies a bootstrapped anonymous distinct id', async () => {
+    await posthog.shutdown()
+    posthog = await createClient({ bootstrap: { distinctId: 'user-1', isIdentifiedId: false } })
+
+    posthog.identify('user-1', { plan: 'pro' }, { options })
+    await posthog.flush()
+
+    expect(sent.map(({ event }) => event.event)).not.toContain('$identify')
+    expect(sentEvent('$set').options).toEqual(options)
+  })
+
   it('does not record the hash for an $identify sent with process_person_profile false', async () => {
     posthog.identify('user-1', { plan: 'pro' }, { options: { process_person_profile: false } })
     posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
