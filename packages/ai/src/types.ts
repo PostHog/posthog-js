@@ -220,6 +220,7 @@ export type PromptVariables = Record<string, string | number | boolean>
  * Direct options for initializing Prompts without a PostHog client
  */
 export interface PromptsDirectOptions {
+  /** A personal API key (`phx_`) or a project secret API key (`phs_`) with the `llm_prompt:read` scope. */
   personalApiKey: string
   projectApiKey: string
   host?: string
