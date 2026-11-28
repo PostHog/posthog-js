@@ -1,14 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { PropertyFilters, Survey } from '@posthog/core'
-import { doesSurveyActivateByEvent, matchPropertyFilters } from '@posthog/core/surveys'
-import { PostHog } from '../posthog-rn'
+import type { ActionStepType, PropertyFilters, PropertyOperator, Survey } from '@posthog/core'
+import { matchPropertyFilters } from '@posthog/core/surveys'
+import type { PostHog } from '../posthog-rn'
 
 const SURVEY_SHOWN_EVENT_NAME = 'survey shown'
 
 interface EventSurveyConfig {
   surveyId: string
   propertyFilters?: PropertyFilters
+}
+
+type SurveyActionStep = ActionStepType & {
+  properties?: {
+    key: string
+    value?: string | number | boolean | (string | number | boolean)[] | null
+    operator?: PropertyOperator
+  }[]
+}
+
+function actionPropertyFilters(step: SurveyActionStep): PropertyFilters | undefined {
+  return step.properties?.length
+    ? Object.fromEntries(
+        step.properties.map(({ key, value, operator = 'exact' }) => [
+          key,
+          { values: Array.isArray(value) ? value.map(String) : value == null ? [] : [String(value)], operator },
+        ])
+      )
+    : undefined
 }
 
 export function useActivatedSurveys(posthog: PostHog, surveys: Survey[]): ReadonlySet<string> {
@@ -21,14 +40,27 @@ export function useActivatedSurveys(posthog: PostHog, surveys: Survey[]): Readon
 
   const eventMap = useMemo(() => {
     const newEventMap = new Map<string, EventSurveyConfig[]>()
-    for (const survey of surveys.filter(doesSurveyActivateByEvent)) {
+
+    const register = (eventName: string, config: EventSurveyConfig): void => {
+      const configs = newEventMap.get(eventName) ?? []
+      configs.push(config)
+      newEventMap.set(eventName, configs)
+    }
+
+    for (const survey of surveys) {
       for (const event of survey.conditions?.events?.values ?? []) {
-        const configs = newEventMap.get(event.name) ?? []
-        configs.push({
+        register(event.name, {
           surveyId: survey.id,
           propertyFilters: event.propertyFilters,
         })
-        newEventMap.set(event.name, configs)
+      }
+      for (const action of survey.conditions?.actions?.values ?? []) {
+        for (const step of action.steps ?? []) {
+          // Native events cannot satisfy an action step that depends on a DOM element or page URL.
+          if (step?.event && !step.selector && !step.text && !step.href && !step.url) {
+            register(step.event, { surveyId: survey.id, propertyFilters: actionPropertyFilters(step) })
+          }
+        }
       }
     }
     return newEventMap

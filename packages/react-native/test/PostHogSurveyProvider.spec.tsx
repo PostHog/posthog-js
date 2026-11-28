@@ -136,6 +136,22 @@ describe('PostHogSurveyProvider — autoPresentSurveys gating', () => {
     expect(sendSurveyShownEvent).not.toHaveBeenCalled()
   })
 
+  it('shows an action-targeted survey only after the captured event matches its properties', async () => {
+    const steps = [{ event: 'checkout', properties: [{ key: 'status', value: 'paid' }] }]
+    mockClient = makeClient([{ ...popoverSurvey, conditions: { actions: { values: [{ id: 1, steps }] } } }])
+    const { getByTestId, queryByTestId } = renderProvider()
+    await flush()
+
+    const capture = mockClient.on.mock.calls.find(([name]: [string]) => name === 'capture')[1]
+    act(() => capture({ event: 'checkout', properties: { status: 'pending' } }))
+    expect(queryByTestId('survey-modal')).toBeNull()
+    expect(sendSurveyShownEvent).not.toHaveBeenCalled()
+
+    act(() => capture({ event: 'checkout', properties: { status: 'paid' } }))
+    expect(getByTestId('survey-modal').getAttribute('data-survey-id')).toBe(popoverSurvey.id)
+    expect(sendSurveyShownEvent).toHaveBeenCalledTimes(1)
+  })
+
   it('presents once the gate flips true, firing "survey shown" exactly once', async () => {
     const { queryByTestId, rerender } = renderProvider(false)
     await flush()
