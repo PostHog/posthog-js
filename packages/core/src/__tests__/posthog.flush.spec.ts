@@ -16,6 +16,25 @@ describe('PostHog Core', () => {
       })
     })
 
+    it.each([
+      ['a null entry', null],
+      ['an entry with a null message', { message: null }],
+      ['an entry whose message is a string', { message: 'bad' }],
+    ])('drops %s from the stored queue and still sends the other events', async (_, malformed) => {
+      vi.useRealTimers()
+      mocks.fetch.mockResolvedValue(new Response(null, { status: 200 }))
+      posthog.capture('before')
+      const queue = mocks.storage.getItem(PostHogPersistedProperty.Queue) as unknown[]
+      posthog.setPersistedProperty(PostHogPersistedProperty.Queue, [malformed, ...queue] as any)
+      posthog.capture('after')
+
+      await expect(posthog.flush()).resolves.not.toThrow()
+
+      const sent = mocks.fetch.mock.calls.flatMap(([, init]) => JSON.parse(init.body).batch.map((e: any) => e.event))
+      expect(sent).toEqual(['before', 'after'])
+      expect(mocks.storage.getItem(PostHogPersistedProperty.Queue)).toEqual([])
+    })
+
     it("doesn't fail when queue is empty", async () => {
       vi.useRealTimers()
       await expect(posthog.flush()).resolves.not.toThrow()
