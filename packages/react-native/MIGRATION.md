@@ -69,8 +69,6 @@ Then run `pod install` in `ios`, or `npx expo prebuild --clean`. Remove `pod 'Po
 Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
 An installed plugin older than 3.0 is ignored the same way, with a warning that asks you to upgrade it. The SDK then doesn't call the native SDK at all, so `reset()` and `optOut()` don't unregister a push token that the native SDK registered under 4.x. Upgrade the plugin before you ship 5.0 if you use push notifications.
 
-`@posthog/react-native-plugin` 3.0 also works with posthog-react-native 4.x, so you can upgrade the plugin first and posthog-react-native after.
-
 ## Personal API keys
 
 5.0 disables the client when the project token is a personal API key (`phx_...`), like posthog-node, posthog-ios and posthog-android, and logs `A personal API key ("phx_...") was passed where the project token ("phc_...") belongs. The client will be disabled.`

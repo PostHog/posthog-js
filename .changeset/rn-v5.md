@@ -2,9 +2,7 @@
 'posthog-react-native': major
 ---
 
-- **Breaking:** stop loading `posthog-react-native-session-replay` when `@posthog/react-native-plugin` isn't installed — install `@posthog/react-native-plugin` 3.0 or later for session replay and native features
-- **Breaking:** require `@posthog/react-native-plugin` 3.0 or later
-- **Breaking:** ignore `@posthog/react-native-plugin` older than 3.0 and log a warning to upgrade, leaving session replay and other native features off
+- **Breaking:** session replay, native crash capture and push notification capture need the optional `@posthog/react-native-plugin` 3.0 or later. `posthog-react-native-session-replay` is no longer loaded, and a plugin older than 3.0 is ignored with a warning to upgrade
 - **Breaking:** remove the `PostHogProvider` `apiKey` prop — pass `projectToken` instead
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
@@ -29,12 +27,14 @@
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off. For a flag that isn't in the loaded flags, both return `undefined` (or the default you pass to `useFeatureFlagEnabled()`) where `useFeatureFlag()` returned `false`
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
-- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` `$process_person_profile` counts as unset, and a `null` `$is_identified` sends the event without it
+- **Breaking:** a registered or caller `$is_identified` property replaces the SDK's value on that event, and a `null` one sends the event without it. A registered or caller `$process_person_profile` decides whether that event processes the person, where 4.x replaced it with its own value; a `null` one counts as unset
 - **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
 - **Breaking:** send person processing as posthog-ios and posthog-android 4.0 do: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none. Events no longer carry a `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person
 - **Breaking:** add `$is_identified` to `$autocapture` events, and send them with the `process_person_profile: false` option for anonymous users under `personProfiles: 'identified_only'`, so anonymous autocapture follows the policy like other events
 - **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
+- **Breaking:** a `2xx` capture response without a PostHog `results` body drops the batch and reports it on `posthog.on('error')` — reverse proxies must return PostHog's response body unchanged
+- **Breaking:** on react-native-web, a reverse proxy that answers CORS preflight requests with a fixed `Access-Control-Allow-Headers` list must allow `Authorization`, `PostHog-Sdk-Info`, `PostHog-Attempt`, `PostHog-Request-Id` and `PostHog-Request-Timestamp`, or the browser blocks every capture request and events stay queued
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
 - **Breaking:** PostHog drops an event whose distinct ID or event name is over 200 UTF-8 bytes, such as one with a JWT as its distinct ID, and `posthog.on('error')` reports it. 4.x shortened a long distinct ID and kept the event
 - **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase, and one that isn't a valid UUID is replaced with a new one
@@ -51,4 +51,3 @@
 - Cap each capture request at 5 MiB of event bytes, starting a new request before a batch would pass it
 - Add `captureAi()`, which sends AI observability events such as `$ai_generation` to PostHog's AI endpoint (`/i/v1/ai/events`) from their own queue, with the `captureAiCompression`, `captureAiMaxQueueSize`, `captureAiRequestTimeoutMs` and `captureAiMaxEventBytes` options — serve `/i/v1/ai/events` on reverse proxies and self-hosted instances. Unsent AI events are kept across app restarts in the app's cache directory, which isn't backed up, when the SDK uses Expo's file system; with `persistence: 'memory'`, `customStorage` or AsyncStorage they're kept only in memory
 - Report AI events dropped before sending (invalid, unserializable, too large, or pushed out of a full queue) on `posthog.on('error')`, like posthog-node
-- `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them
