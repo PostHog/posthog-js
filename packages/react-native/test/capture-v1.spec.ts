@@ -140,10 +140,10 @@ describe('React Native capture v1 delivery', () => {
     expect(sentEvents()).toEqual([['kept'], ['kept'], ['kept'], ['dropped']])
     expect(warn.mock.calls).toEqual([
       [
-        '[PostHog] /i/v1/analytics/events on https://us.i.posthog.com returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/analytics/events.',
+        '[PostHog] /i/v1/analytics/events returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/analytics/events.',
       ],
       [
-        '[PostHog] /i/v1/analytics/events on https://us.i.posthog.com returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.',
+        '[PostHog] /i/v1/analytics/events returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.',
       ],
     ])
   })
@@ -155,6 +155,7 @@ describe('React Native capture v1 delivery', () => {
     'https://proxy.example.com/ingest/secret?token=secret#secret',
     'https://proxy.example.com\\ingest\\secret',
     'https://user:secret@proxy.example.com\\ingest',
+    'https://user:secret\\@proxy.example.com',
   ])('leaves credentials in the host %s out of the 404 warning', async (host) => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const client = new PostHog('test-token', {
@@ -172,9 +173,7 @@ describe('React Native capture v1 delivery', () => {
     ;(client as any)._captureResendAt = 0
     await client.shutdown()
 
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/^\[PostHog\] \/i\/v1\/analytics\/events on https:\/\/proxy\.example\.com returned 404/)
-    )
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[PostHog\] \/i\/v1\/analytics\/events returned 404/))
     expect(warn.mock.calls.flat().join()).not.toMatch(/sec|ret@|corp|ingest/)
   })
 

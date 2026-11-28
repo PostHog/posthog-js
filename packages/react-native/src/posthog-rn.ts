@@ -1273,21 +1273,15 @@ export class PostHog extends PostHogCoreBase {
     compression: 'gzip' | 'none',
     requestTimeoutMs: number
   ): V1CaptureSender {
-    // Printed whatever `debug` is, once per status: a 404 keeps every event queued and a 401 drops them.
+    // Printed whatever `debug` is, once per status: a 404 keeps every event queued and a 401 drops them. The
+    // host is left out, so credentials in its userinfo, path or query never reach the console.
     const warnedStatuses = new Set<number>()
-    // Only the scheme and host:port, so credentials in the host's userinfo, path or query never reach the console.
-    // Fetch reads `\` as `/` and drops tabs and newlines, so the host is normalized the same way first.
-    const origin = this.host
-      .replace(/[\t\n\r]/g, '')
-      .replace(/\\/g, '/')
-      .match(/^([a-z][a-z0-9+.-]*:\/\/)(?:[^/?#]*@)?([^/?#@]*)/i)
-    const endpoint = origin ? `${path} on ${origin[1]}${origin[2]}` : path
     const warnOnStatus = (status: number): void => {
       const warning =
         status === 404
-          ? `${endpoint} returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves ${path}.`
+          ? `${path} returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves ${path}.`
           : status === 401
-            ? `${endpoint} returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.`
+            ? `${path} returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.`
             : undefined
       if (warning === undefined || warnedStatuses.has(status)) {
         return
