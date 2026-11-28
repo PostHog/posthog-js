@@ -222,7 +222,23 @@ type ManualRecordingStartRequest = {
   awaitEventTrigger?: boolean
 }
 
+// The batching defaults of posthog-ios and posthog-android.
+const DEFAULT_FLUSH_INTERVAL_MS = 30000
+const DEFAULT_MAX_BATCH_SIZE = 50
+
 export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvironments' | 'disableRemoteConfig'> {
+  /**
+   * The interval in milliseconds between periodic flushes
+   *
+   * @default 30000
+   */
+  flushInterval?: number
+  /**
+   * The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)
+   *
+   * @default 50
+   */
+  maxBatchSize?: number
   /**
    * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
@@ -629,7 +645,12 @@ export class PostHog extends PostHogCoreBase {
       )
     }
 
-    super(normalizedProjectToken, personalApiKey ? { ...options, disabled: true } : options)
+    const batchingOptions: PostHogOptions = {
+      ...options,
+      flushInterval: options?.flushInterval ?? DEFAULT_FLUSH_INTERVAL_MS,
+      maxBatchSize: options?.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE,
+    }
+    super(normalizedProjectToken, personalApiKey ? { ...batchingOptions, disabled: true } : batchingOptions)
     this.on('featureflags', () => {
       this._featureFlagsLoaded = true
     })
@@ -1316,8 +1337,8 @@ export class PostHog extends PostHogCoreBase {
       {
         // A queue smaller than flushAt would evict events before a count flush could send them.
         flushAt: Math.min(this.flushAt, maxQueueSize),
-        maxBatchSize: Math.max(this.flushAt, options?.maxBatchSize ?? 100),
-        flushIntervalMs: options?.flushInterval ?? 10000,
+        maxBatchSize: Math.max(this.flushAt, options?.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE),
+        flushIntervalMs: options?.flushInterval ?? DEFAULT_FLUSH_INTERVAL_MS,
         maxQueueSize,
         maxEventBytes: Math.floor(maxEventBytes),
       },

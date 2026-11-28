@@ -42,6 +42,7 @@
 - **Breaking:** PostHog drops an event whose distinct ID or event name is over 200 UTF-8 bytes, such as one with a JWT as its distinct ID, and `posthog.on('error')` reports it. 4.x shortened a long distinct ID and kept the event
 - **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
+- **Breaking:** send queued events every 30 seconds instead of every 10, and at most 50 per request instead of 100, like posthog-ios and posthog-android — pass `flushInterval: 10000` and `maxBatchSize: 100` to keep the 4.x timing
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
 - **Breaking:** a personal API key (`phx_...`) passed as the project token disables the client and logs an error, like posthog-node, posthog-ios and posthog-android, instead of being sent to PostHog

@@ -21,6 +21,7 @@ You need to change code or configuration if your app does any of these:
 - reads a feature flag payload that isn't valid JSON, or bootstraps string payloads
 - reads `enabled` from `getFeatureFlagResult()` or `getAllFeatureFlags()` for a flag whose variant is an empty string, or filters on `$active_feature_flags`
 - sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header the SDK sets in `requestHeaders` and expects capture requests to carry it
+- relies on the default `flushInterval` (10 seconds) or `maxBatchSize` (100) (see [Event delivery](#event-delivery))
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events, or calls `captureTraceFeedback()` or `captureTraceMetric()` (see [AI events](#ai-events))
 - registers `$is_identified` or `$process_person_profile`, or sends `null` property values (see [Event properties](#event-properties))
@@ -199,6 +200,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 
 ## Event delivery
 
+- Queued events are sent every 30 seconds instead of every 10, and at most 50 per request instead of 100, like posthog-ios and posthog-android. Pass `flushInterval: 10000` and `maxBatchSize: 100` to keep the 4.x timing. A queue of `flushAt` events (20 by default) is still sent right away.
 - `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; the SDK sets its own. Other `requestHeaders` still do, and feature flag requests still get all of them.
 - Events stay queued when a send gets no response, a `404`, `408`, `429`, `500`, `502`, `503` or `504`, or a `retry` result. They're sent again after a wait of about 1 second doubling to 30 seconds, longer if the server's `Retry-After` asks (up to 30 seconds), with no attempt limit. `fetchRetryCount` and `fetchRetryDelay` no longer apply to events.
 - `flush()` and `shutdown()` no longer reject when delivery fails. Events either stay queued for a later send or are dropped and reported through `posthog.on('error')`.
