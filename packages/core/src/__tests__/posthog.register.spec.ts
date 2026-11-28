@@ -99,6 +99,38 @@ describe('PostHog Core', () => {
       expect(onCapture.mock.calls[0][0].properties.$geoip_disable).toBe(geoipDisable)
     })
 
+    it('registers a caller $groups and sends only its groups in the legacy order', () => {
+      posthog.group('company', 'acme')
+      expect(captured({ $groups: { project: 'p1' } }).$groups).toEqual({ project: 'p1' })
+      expect(posthog.getPersistedProperty<any>(PostHogPersistedProperty.Props).$groups).toEqual({
+        company: 'acme',
+        project: 'p1',
+      })
+    })
+
+    it('merges a caller $groups over the registered groups without registering it', () => {
+      useNativePropertyOrder()
+      posthog.group('company', 'acme')
+      posthog.group('team', 't1')
+      const reloadFeatureFlags = vi.spyOn(posthog, 'reloadFeatureFlags')
+
+      expect(captured({ $groups: { team: 't2', project: 'p1' } }).$groups).toEqual({
+        company: 'acme',
+        team: 't2',
+        project: 'p1',
+      })
+      const onAutocapture = vi.fn()
+      posthog.on('autocapture', onAutocapture)
+      posthog.autocapture('click', [], { $groups: { project: 'p2' } })
+      expect(onAutocapture.mock.calls[0][0].properties.$groups).toEqual({ company: 'acme', team: 't1', project: 'p2' })
+
+      expect(posthog.getPersistedProperty<any>(PostHogPersistedProperty.Props).$groups).toEqual({
+        company: 'acme',
+        team: 't1',
+      })
+      expect(reloadFeatureFlags).not.toHaveBeenCalled()
+    })
+
     it('reads the SDK session unless the caller sets a session id', () => {
       useNativePropertyOrder()
       const getSessionId = vi.spyOn(posthog, 'getSessionId')

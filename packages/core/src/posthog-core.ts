@@ -362,16 +362,20 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     // per-call `disableGeoip` sits under the caller's `$geoip_disable`. A `null`, `undefined` or blank `$session_id`
     // counts as unset, and `$lib` and `$lib_version` fill last, as a pair. The SDK session is read, which records
     // session activity and can rotate the session, unless the caller's properties carry a `$session_id`; a
-    // registered `$session_id` still wins for the event.
+    // registered `$session_id` still wins for the event. A caller `$groups` map adds to the registered groups, its
+    // key winning per group type, instead of replacing them.
     const { $lib, $lib_version, ...sdkProperties } = this.getCommonEventProperties()
     const callerSessionId = userProperties.$session_id
     const sessionId = isFilledString(callerSessionId) && callerSessionId.trim() ? undefined : this.getSessionId()
-    const enriched: PostHogEventProperties = {
+    const registered: PostHogEventProperties = {
       ...sdkProperties,
       ...this.props,
       ...this.sessionProps,
       ...(options?.disableGeoip != null && { $geoip_disable: options.disableGeoip }),
-      ...userProperties,
+    }
+    const enriched: PostHogEventProperties = { ...registered, ...userProperties }
+    if (isObject(registered.$groups) && isObject(userProperties.$groups)) {
+      enriched.$groups = { ...registered.$groups, ...userProperties.$groups }
     }
     if (!isFilledString(enriched.$session_id) || !enriched.$session_id.trim()) {
       enriched.$session_id = sessionId ?? this.getSessionId()
@@ -383,7 +387,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   /**
    * Whether events use the posthog-js-lite / React Native 4.x property order: the SDK's own properties, such as
    * `$lib`, `$os` and `$feature/<key>`, replace registered ones, the SDK's `$session_id` replaces a registered or
-   * caller one, and the client-level `disableGeoip` setting replaces a registered or caller `$geoip_disable`.
+   * caller one, the client-level `disableGeoip` setting replaces a registered or caller `$geoip_disable`, and
+   * `capture()` registers a caller `$groups`, whose map then replaces the registered groups on that event.
    * {@link PostHogCore} keeps it for posthog-js-lite and `@posthog/electron`.
    */
   protected usesLegacyEventPropertyOrder(): boolean {
@@ -686,7 +691,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     this.wrap(() => {
       const distinctId = this.getDistinctId()
 
-      if (properties?.$groups) {
+      // The legacy property order registers a caller `$groups`, which can reload feature flags and turn on person
+      // processing. Otherwise the caller's groups apply to this event only.
+      if (this.usesLegacyEventPropertyOrder() && properties?.$groups) {
         this.groups(properties.$groups as PostHogGroupProperties)
       }
 

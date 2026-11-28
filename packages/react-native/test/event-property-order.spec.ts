@@ -125,6 +125,27 @@ describe('event property order', () => {
     expect(client.getPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp)).toBe(lastActivity)
   })
 
+  it('merges a caller $groups over the registered groups for that event only', () => {
+    const client = newPostHog()
+    client.group('company', 'acme')
+    client.group('team', 't1')
+
+    client.capture('Signed Up', { $groups: { team: 't2', project: 'p1' } })
+    client.capture('Viewed Dashboard')
+
+    expect(queued(client, 'Signed Up').properties.$groups).toEqual({ company: 'acme', team: 't2', project: 'p1' })
+    expect(queued(client, 'Viewed Dashboard').properties.$groups).toEqual({ company: 'acme', team: 't1' })
+  })
+
+  it('keeps an anonymous user personless when a caller $groups is set', () => {
+    const client = newPostHog()
+
+    client.capture('Signed Up', { $groups: { company: 'acme' } })
+
+    expect(queued(client, 'Signed Up').options).toEqual({ process_person_profile: false })
+    expect(client.getPersistedProperty(PostHogPersistedProperty.PersonMode)).toBeUndefined()
+  })
+
   it('records session activity when a registered $session_id wins', () => {
     const client = newPostHog()
     const sessionId = client.getSessionId()
