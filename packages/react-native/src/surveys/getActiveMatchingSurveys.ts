@@ -74,9 +74,8 @@ export function getActiveMatchingSurveys(
       return false
     }
 
-    const eventBasedTargetingFlagCheck =
-      !doesSurveyActivateByEvent(survey) || hasProgress || activatedSurveys.has(survey.id)
-    if (!eventBasedTargetingFlagCheck) return false
+    const awaitsActivation = doesSurveyActivateByEvent(survey) || !!survey.conditions?.actions?.values?.length
+    if (awaitsActivation && !hasProgress && !activatedSurveys.has(survey.id)) return false
 
     if (
       !survey.linked_flag_key &&
@@ -110,13 +109,6 @@ export function getActiveMatchingSurveys(
         })
       : true
 
-    return (
-      linkedFlagCheck &&
-      linkedFlagVariantCheck &&
-      targetingFlagCheck &&
-      internalTargetingFlagCheck &&
-      eventBasedTargetingFlagCheck &&
-      flagsCheck
-    )
+    return linkedFlagCheck && linkedFlagVariantCheck && targetingFlagCheck && internalTargetingFlagCheck && flagsCheck
   })
 }
