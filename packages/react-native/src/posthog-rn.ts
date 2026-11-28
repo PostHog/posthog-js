@@ -1399,6 +1399,21 @@ export class PostHog extends PostHogCoreBase {
     }
   }
 
+  // The event `$timezone` when the app properties have one, none when `customAppProperties` sets it to null or '',
+  // else the JS runtime's. The default app properties have `$timezone` only when expo-localization or
+  // react-native-localize provides it.
+  protected getFlagsRequestTimezone(): string | undefined {
+    if ('$timezone' in this._appProperties) {
+      const timezone = this._appProperties.$timezone
+      return typeof timezone === 'string' && timezone ? timezone : undefined
+    }
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+    } catch {
+      return undefined
+    }
+  }
+
   // The replay debug keys are SDK-owned, so they land after the caller's properties (where
   // posthog-js sets them too) on every enqueue path, including autocapture, which skips
   // buildPayload. A minimal $feature_flag_called envelope stays minimal.
@@ -2217,13 +2232,10 @@ export class PostHog extends PostHogCoreBase {
   /**
    * Checks if a feature flag is enabled for the current user.
    *
-   * A `false` return value means the SDK resolved the current value as off. If no evaluation is
-   * available, this method returns `defaultValue` when provided. Without a default, it returns
-   * `undefined` before flags load; for backwards compatibility, a missing key can resolve to
-   * `false` after a non-empty response is stored.
-   *
-   * Globally inactive flags are omitted from remote responses, so they follow this missing-key
-   * behavior rather than carrying an explicit off evaluation.
+   * Returns `true` when the flag evaluates on and `false` when it evaluates off. When no evaluation is
+   * available, such as before flags load, after a failed first load, or for a key that isn't in the loaded
+   * flags, it returns `defaultValue`, or `false` when you don't pass one. Use `getFeatureFlagResult()` to
+   * tell an unavailable key from a conclusive off result.
    *
    * {@label Feature flags}
    *
@@ -2235,32 +2247,29 @@ export class PostHog extends PostHogCoreBase {
    *
    * @example
    * ```js
-   * // fall back to false while flags are not loaded
-   * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
+   * // fall back to true while flags are not loaded
+   * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: true })
    * ```
    *
    * @public
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
+   * @returns True if the flag evaluates on, false if it evaluates off, or `defaultValue` (`false` unless given) if no evaluation is available
    */
-  isFeatureEnabled(key: string, options: PostHogIsFeatureEnabledOptions & { defaultValue: boolean }): boolean
-  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined
-  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined {
-    return super.isFeatureEnabled(key, options)
+  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean {
+    return super.isFeatureEnabled(key, { ...options, defaultValue: options?.defaultValue ?? false })
   }
 
   /**
    * Gets the value of a feature flag for the current user.
    *
    * Returns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag.
-   * Returns `undefined` before flags load or when loading fails. For backwards compatibility, a
-   * missing key can resolve to `false` after a non-empty response is stored; use
-   * `getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.
+   * Returns `undefined` when no evaluation is available, such as before flags load, after a failed
+   * first load, or for a key that isn't in the loaded flags.
    *
-   * Globally inactive flags are omitted from remote responses, so they follow this missing-key
-   * behavior rather than carrying an explicit off evaluation.
+   * Globally inactive flags are omitted from remote responses, so they read as `undefined` rather
+   * than `false`.
    *
    * {@label Feature flags}
    *
@@ -2274,7 +2283,7 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns The current feature flag value, or undefined if flags are unavailable
+   * @returns The current feature flag value, or undefined if no evaluation is available
    */
   getFeatureFlag(key: string, options?: PostHogFeatureFlagOptions): boolean | string | undefined {
     return super.getFeatureFlag(key, options)
