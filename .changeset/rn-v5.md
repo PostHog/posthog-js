@@ -21,6 +21,7 @@
 - **Breaking:** `getAllFeatureFlags()` returns `undefined` instead of an empty list before flags first load — use `posthog.getAllFeatureFlags() ?? []` where you only iterate
 - **Breaking:** `getFeatureFlag()` returns `undefined` instead of `false` for a flag that isn't in the loaded flags, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key)?.enabled === false` to check that a flag is off
 - **Breaking:** `isFeatureEnabled()` without a `defaultValue` returns `false` instead of `undefined` when the flag has no value, such as before flags load, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key) === undefined` to check that a flag has no value yet
+- **Breaking:** `$feature_flag_called` events carry `$used_bootstrap_value` only for a flag set in `bootstrap.featureFlags`, like posthog-ios and posthog-android
 - **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
 - **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`

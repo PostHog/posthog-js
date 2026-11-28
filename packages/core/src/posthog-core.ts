@@ -296,8 +296,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
   /**
    * Whether flag values keep the legacy semantics: a flag whose variant is an empty string reads as enabled,
-   * `$active_feature_flags` lists every loaded flag, and bootstrapped string payloads are parsed as JSON.
-   * {@link PostHogCore} keeps them for posthog-js-lite.
+   * `$active_feature_flags` lists every loaded flag, bootstrapped string payloads are parsed as JSON, and every
+   * `$feature_flag_called` event carries `$used_bootstrap_value`. {@link PostHogCore} keeps them for posthog-js-lite.
    */
   protected usesLegacyFlagValues(): boolean {
     return false
@@ -1337,8 +1337,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         ...maybeAdd('$feature_flag_reason', featureFlag?.reason?.description ?? featureFlag?.reason?.code),
         ...maybeAdd('$feature_flag_bootstrapped_response', bootstrappedResponse),
         ...maybeAdd('$feature_flag_bootstrapped_payload', bootstrappedPayload),
-        // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value
-        $used_bootstrap_value: !this.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit),
+        // If we haven't yet received a response from the /flags endpoint, we must have used the bootstrapped value.
+        // Only a bootstrapped flag gets it, as in posthog-ios and posthog-android, unless legacy flag values are kept.
+        ...(this.usesLegacyFlagValues() || bootstrappedResponse !== undefined
+          ? { $used_bootstrap_value: !this.getPersistedProperty(PostHogPersistedProperty.FlagsEndpointWasHit) }
+          : {}),
         ...maybeAdd('$feature_flag_request_id', details?.requestId),
         ...maybeAdd('$feature_flag_evaluated_at', details?.evaluatedAt),
         ...maybeAdd('$feature_flag_error', featureFlagError),

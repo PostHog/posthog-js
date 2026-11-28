@@ -24,6 +24,7 @@ You need to change code or configuration if your app does any of these:
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events, or calls `captureTraceFeedback()` or `captureTraceMetric()` (see [AI events](#ai-events))
 - registers `$is_identified` or `$process_person_profile`, or sends `null` property values (see [Event properties](#event-properties))
+- filters insights on `$used_bootstrap_value` (see [Event properties](#event-properties))
 - sends distinct IDs or event names over 200 UTF-8 bytes, such as a JWT as the distinct ID (see [Event delivery](#event-delivery))
 
 ## Reverse proxies and self-hosted PostHog
@@ -224,6 +225,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - Person processing is sent as posthog-ios and posthog-android 4.0 send it: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none, since PostHog processes the person by default. In 4.x every event carried a `$process_person_profile` property of `true` or `false`. Now events carry no `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person.
 - `$autocapture` events carry `$is_identified`, and get the `process_person_profile: false` option when the person isn't processed, like other events, so anonymous autocapture follows `personProfiles: 'identified_only'`. In 4.x they carried neither, and PostHog processed the person.
 - `null` and `undefined` property values are left off events, except inside `$set`, `$set_once` and `$group_set`, where a `null` still clears the property. Array elements keep their positions.
+- `$feature_flag_called` events carry `$used_bootstrap_value` only for a flag set in `bootstrap.featureFlags`, as posthog-ios and posthog-android send it. In 4.x every `$feature_flag_called` event carried it. Filter on `$feature_flag_bootstrapped_response` being set to find flag calls for bootstrapped flags.
 
 ### Per-event options
 
