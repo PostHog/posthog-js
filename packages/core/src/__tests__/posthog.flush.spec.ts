@@ -1,5 +1,6 @@
 import { delay, waitForPromises, createTestClient, PostHogCoreTestClient, PostHogCoreTestClientMocks } from '@/testing'
 import { PostHogPersistedProperty } from '@/types'
+import type { SendBatchOutcome } from '@/posthog-core-stateless'
 
 describe('PostHog Core', () => {
   let posthog: PostHogCoreTestClient
@@ -60,6 +61,30 @@ describe('PostHog Core', () => {
       mocks.fetch.mockResolvedValue(new Response(null, { status: 200 }))
       await durable.flush()
       expect(durable.getPersistedProperty(PostHogPersistedProperty.Queue)).toEqual([])
+    })
+
+    it('leaves the stored queue alone when a deferred batch keeps every event', async () => {
+      class DeferringClient extends PostHogCoreTestClient {
+        protected async sendBatch(batch: unknown[]): Promise<SendBatchOutcome> {
+          return { keepIndices: batch.map((_, index) => index) }
+        }
+      }
+      const options = { flushInterval: 0, flushAt: 10, disableCompression: true }
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', options)
+      const client = new DeferringClient(mocks, 'TEST_API_KEY', options)
+      client.capture('kept-1')
+      client.capture('kept-2')
+      const queueWrites = (): number =>
+        mocks.storage.setItem.mock.calls.filter(([key]) => key === PostHogPersistedProperty.Queue).length
+      const writesBefore = queueWrites()
+
+      await client.flush()
+
+      expect(queueWrites()).toBe(writesBefore)
+      expect(client.getPersistedProperty(PostHogPersistedProperty.Queue)).toMatchObject([
+        { message: { event: 'kept-1' } },
+        { message: { event: 'kept-2' } },
+      ])
     })
 
     it('preserves response consumption for HTTP 302 feature flag reads', async () => {

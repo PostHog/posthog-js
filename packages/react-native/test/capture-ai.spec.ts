@@ -862,6 +862,95 @@ describe('React Native captureAi', () => {
     expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
   })
 
+  it('halves the AI batch after a request times out, so a slow network still sends every event', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = (request) =>
+      request.path === AI_PATH && request.body.batch.length > 1
+        ? new Promise<never>(() => {})
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10, captureAiRequestTimeoutMs: 20 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([2, 1, 1])
+  })
+
+  it('doubles the AI batch back after a timeout once batches are delivered again', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let slow = true
+    respond = (request) =>
+      slow && request.path === AI_PATH && request.body.batch.length > 1
+        ? new Promise<never>(() => {})
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 20, captureAiRequestTimeoutMs: 20 })
+
+    for (let index = 0; index < 4; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await client.flush()
+    endResendWait(client)
+    slow = false
+    await client.flush()
+    for (let index = 0; index < 8; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([4, 2, 2, 8])
+  })
+
+  it('keeps the AI batch size a 413 sets after a timeout lowered it', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let slow = true
+    respond = (request) => {
+      if (request.path !== AI_PATH || request.body.batch.length === 1) {
+        return { status: 200, body: { results: {} } }
+      }
+      return slow ? new Promise<never>(() => {}) : { status: 413 }
+    }
+    const client = await newPostHog({ flushAt: 20, captureAiRequestTimeoutMs: 20 })
+
+    for (let index = 0; index < 4; index++) {
+      client.captureAi('$ai_generation', { index })
+    }
+    await client.flush()
+    endResendWait(client)
+    slow = false
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH).map((r) => r.body.batch.length)).toEqual([4, 2, 1, 1, 1, 1])
+  })
+
+  it('moves a lone AI event that keeps timing out behind the queued events, and keeps it', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = (request) =>
+      request.path === AI_PATH && request.body.batch.some((event) => event.properties?.index === 0)
+        ? new Promise<never>(() => {})
+        : { status: 200, body: { results: {} } }
+    const client = await newPostHog({ flushAt: 10, captureAiRequestTimeoutMs: 20 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    client.captureAi('$ai_generation', { index: 1 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+
+    const ai = requests.filter((request) => request.path === AI_PATH)
+    expect(ai.map((request) => request.body.batch.map((event) => event.properties?.index))).toEqual([
+      [0, 1],
+      [0],
+      [1],
+      [0],
+    ])
+    expect((client as any)._aiLane._events.map((item: { uuid: string }) => item.uuid)).toHaveLength(1)
+  })
+
   it('drops a single AI event the server rejects with 413', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     respond = (request) => (request.path === AI_PATH ? { status: 413 } : { status: 200, body: { results: {} } })

@@ -26,6 +26,7 @@ export type PostHogReactNativePluginExtended = typeof PostHogReactNativePlugin &
   getSessionReplayDebugProperties?: () => Promise<{ [key: string]: any }>
   markFatalExceptionHandled?: (message: string) => Promise<void>
   setAppLanguage?: (language: string | null) => Promise<void>
+  gzip?: (payload: string) => Promise<string | null>
 }
 
 export type OptionalPluginLoaders = {

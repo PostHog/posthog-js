@@ -82,7 +82,11 @@ export class CaptureAiLane {
   private _resend?: { events: QueuedAiEvent[]; request: V1RequestIdentity }
   private _shutdownWait?: { timer: ReturnType<typeof setTimeout>; resolve: () => void }
   private _batchSize: number
+  // Set while a timeout keeps the batch size below `maxBatchSize`; each delivered batch then doubles it back.
+  private _batchSizeLoweredByTimeout = false
   private _stopped = false
+  // Aborts the request in flight, including one still being compressed, when the lane stops.
+  private _sendAbort?: AbortController
   // Once shutdown starts it sends every resend itself, so no timer may send on its own.
   private _shuttingDown = false
   private _events: QueuedAiEvent[] = []
@@ -200,6 +204,7 @@ export class CaptureAiLane {
 
   stop(): void {
     this._stopped = true
+    this._sendAbort?.abort()
     this._clearFlushTimer()
     this._clearResendTimer()
     this._resendAt = 0
@@ -260,7 +265,9 @@ export class CaptureAiLane {
         continue
       }
       let deferral: V1SendDeferral | undefined
+      const sendAbort = (this._sendAbort = new AbortController())
       const kept = await this._sender().send([...batch.keys()], {
+        signal: sendAbort.signal,
         keepUnsent: true,
         // A batch missing an unreadable event is no longer the same request.
         retryOf: exactResend && batch.size === queued.length ? resend.request : undefined,
@@ -268,6 +275,7 @@ export class CaptureAiLane {
           deferral = reason
         },
       })
+      this._sendAbort = undefined
       const keptEvents = new Set(kept)
       const sentEvents = new Set([...batch].filter(([event]) => !keptEvents.has(event)).map(([, item]) => item))
       if (sentEvents.size > 0) {
@@ -276,6 +284,10 @@ export class CaptureAiLane {
       await this.waitForPersist()
 
       if (!deferral) {
+        if (this._batchSizeLoweredByTimeout) {
+          this._batchSize = Math.min(this._settings.maxBatchSize, this._batchSize * 2)
+          this._batchSizeLoweredByTimeout = this._batchSize < this._settings.maxBatchSize
+        }
         this._resendCount = 0
         this._resendAt = 0
         this._clearResendTimer()
@@ -284,9 +296,25 @@ export class CaptureAiLane {
       }
       if (deferral.tooLarge) {
         this._batchSize = Math.max(1, Math.floor(batch.size / 2))
+        this._batchSizeLoweredByTimeout = false
         continue
       }
+      // The whole request has one deadline, so a batch too big for the network to upload in time is resent in halves.
+      if (deferral.timedOut && batch.size > 1) {
+        this._batchSize = Math.max(1, Math.floor(batch.size / 2))
+        this._batchSizeLoweredByTimeout = true
+        this._scheduleResend(deferral.retryAfterMs)
+        return
+      }
       const keptInOrder = [...batch].filter(([event]) => keptEvents.has(event)).map(([, item]) => item)
+      // A lone event that keeps timing out goes to the back of the queue, so the events behind it still go out.
+      if (deferral.timedOut && keptInOrder.length === 1 && this._events.length > 1) {
+        const [stuck] = keptInOrder
+        this._setQueue([...this._events.filter((event) => event !== stuck), stuck])
+        await this.waitForPersist()
+        this._scheduleResend(deferral.retryAfterMs)
+        return
+      }
       if (keptInOrder.length > 0) {
         this._resend = { events: keptInOrder, request: deferral.request }
       }
