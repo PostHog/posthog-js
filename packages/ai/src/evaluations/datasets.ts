@@ -204,7 +204,7 @@ const ITEM_KEYS = [
   'sourceTimestamp',
 ]
 
-/** Dataset management. Writes require a personal key with dataset:write. */
+/** Dataset management. Writes require dataset:write. */
 export class Datasets {
   readonly #transport: Transport
   readonly #base: string

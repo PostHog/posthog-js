@@ -28,11 +28,12 @@ const loadOptionalPlugin = (
   {
     primaryInstalled = true,
     primaryMetadataAvailable = true,
-  }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean } = {}
+    primaryVersion = '3.0.0',
+  }: { primaryInstalled?: boolean; primaryMetadataAvailable?: boolean; primaryVersion?: string } = {}
 ): LoadedOptionalPlugin => {
   const loaders: OptionalPluginLoaders = {
     loadPrimary: optionalLoader(primaryInstalled, PRIMARY) as OptionalPluginLoaders['loadPrimary'],
-    loadPrimaryVersion: optionalLoader(primaryMetadataAvailable, '2.4.1'),
+    loadPrimaryVersion: optionalLoader(primaryMetadataAvailable, primaryVersion),
   }
   return resolveOptionalPlugin(os, loaders)
 }
@@ -47,10 +48,30 @@ describe('OptionalPlugin loader', () => {
   })
 
   it('loads the primary plugin version from its exported package metadata', () => {
-    expect(loadOptionalPlugin('ios').version).toBe('2.4.1')
+    expect(loadOptionalPlugin('ios').version).toBe('3.0.0')
   })
 
-  it('keeps primary plugin versions that predate the package metadata export usable', () => {
+  it.each(['2.13.3', '1.6.0'])('ignores plugin %s and warns to upgrade', (primaryVersion) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const loaded = loadOptionalPlugin('ios', { primaryVersion })
+
+    expect(loaded).toEqual({ plugin: undefined, version: undefined })
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain(`@posthog/react-native-plugin ${primaryVersion}`)
+    expect(warn.mock.calls[0][0]).toContain('3.0.0 or later')
+    warn.mockRestore()
+  })
+
+  it.each(['3.0.0', '3.0.0-beta.1', '3.2.1', '4.0.0'])('loads plugin %s', (primaryVersion) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(loadOptionalPlugin('ios', { primaryVersion }).plugin).toBe(PRIMARY)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('keeps a plugin whose version cannot be read', () => {
     const loaded = loadOptionalPlugin('ios', { primaryMetadataAvailable: false })
 
     expect(loaded.plugin).toBe(PRIMARY)

@@ -1,4 +1,4 @@
-This is a Next.js example project using the [`@posthog/nextjs-config`](../../posthog-nextjs-config) package.
+This is a Next.js example project using the [`@posthog/nextjs-config`](../../packages/nextjs-config) package.
 
 ## Error Tracking
 

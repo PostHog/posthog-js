@@ -5,6 +5,7 @@ import type {
   PostHogCoreOptions,
   PostHogEventProperties,
   PostHogCaptureOptions,
+  PostHogCaptureOptionsWithEventOptions,
   JsonType,
   PostHogRemoteConfig,
   FeatureFlagValue,
@@ -60,8 +61,46 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
+// Whether stored flag details hold no flags from a successful load or bootstrap. Details stored before
+// the `noFlagsCached` marker existed count as holding none when a failed or quota-limited load left them empty,
+// unless they carry `minimalFlagCalledEvents`, which every successful load has written since RN 4.58.0.
+const holdsNoCachedFlags = (storedDetails: PostHogFlagsStorageFormat): boolean => {
+  if (storedDetails.noFlagsCached !== undefined) {
+    return storedDetails.noFlagsCached
+  }
+  const failedOrQuotaLimited =
+    storedDetails.requestError !== undefined ||
+    storedDetails.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags) === true
+  return (
+    failedOrQuotaLimited &&
+    storedDetails.minimalFlagCalledEvents === undefined &&
+    Object.keys(storedDetails.flags ?? {}).length === 0
+  )
+}
+
+// The per-event `options` a caller or the SDK passed with the capture options, which capture v1 sends apart from the properties.
+const eventOptionsOf = (options?: PostHogCaptureOptions): { [key: string]: JsonType } | undefined => {
+  const eventOptions = (options as { options?: unknown } | undefined)?.options
+  return isObject(eventOptions) ? (eventOptions as { [key: string]: JsonType }) : undefined
+}
+
 // Events that identify, alias, merge or update a person or group.
 const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
+
+// The person-properties hash of a queued message's distinct id, `$set` and `$set_once`, or null when either isn't an object.
+function sentPersonPropertiesHash(message: PostHogEventProperties): string | null {
+  const properties = (isObject(message.properties) ? message.properties : {}) as PostHogEventProperties
+  const set = properties.$set
+  const setOnce = properties.$set_once
+  if ((!isNullish(set) && !isObject(set)) || (!isNullish(setOnce) && !isObject(setOnce))) {
+    return null
+  }
+  return getPersonPropertiesHash(
+    String(message.distinct_id),
+    set as { [key: string]: JsonType } | undefined,
+    setOnce as { [key: string]: JsonType } | undefined
+  )
+}
 
 /**
  * The PostHog client core without the feature flag getters that `getFeatureFlagResult()`,
@@ -92,6 +131,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
   // cache for person properties to avoid duplicate $set events
   protected _cachedPersonProperties: string | null = null
+  // The hash a person-properties update being captured records once queued, or null to clear the stored one
+  private _pendingPersonPropertiesHash: string | null | undefined = undefined
 
   constructor(projectToken: string, options?: PostHogCoreOptions) {
     // Default for stateful mode is to not disable geoip. Only override if explicitly set
@@ -152,6 +193,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const newFeatureFlagDetails = {
           ...this.getStoredFlagDetails(),
           requestError: undefined,
+          noFlagsCached: undefined,
           flags: {
             ...normalizedBootstrapFeatureFlagDetails.flags,
             ...Object.fromEntries(
@@ -310,19 +352,48 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   // A registered or caller `$process_person_profile` or `$is_identified` wins over the SDK's value, as in native
-  // 4.0; a `null` one counts as unset. The legacy person state always uses the SDK's `$process_person_profile`.
-  private stampPersonState(properties: PostHogEventProperties): void {
+  // 4.0. On a personless event the SDK sets the `process_person_profile: false` capture option, unless the caller
+  // set that option, and returns the options to send the event with; PostHog processes the person when both are
+  // missing. The option is set before `before_send`, which can't undo it by editing properties. A `null`
+  // `$process_person_profile` counts as unset; a `null` or `undefined` `$is_identified` still wins, so the event is
+  // sent without it. The legacy person state always sets the SDK's values as properties.
+  private stampPersonState(
+    properties: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): PostHogCaptureOptions | undefined {
     const hasPersonProcessing = this._hasPersonProcessing()
-    if (this.usesLegacyEventPersonState() || properties['$process_person_profile'] == null) {
+    let stampedOptions = options
+    if (this.usesLegacyEventPersonState()) {
       properties['$process_person_profile'] = hasPersonProcessing
+    } else if (properties['$process_person_profile'] == null) {
+      delete properties['$process_person_profile']
+      const eventOptions = eventOptionsOf(options)
+      if (!hasPersonProcessing && eventOptions?.process_person_profile == null) {
+        const personless: PostHogCaptureOptions & { options: { [key: string]: JsonType } } = {
+          ...options,
+          options: { ...eventOptions, process_person_profile: false },
+        }
+        stampedOptions = personless
+      }
     }
-    if (this.usesLegacyEventPersonState() || properties['$is_identified'] == null) {
+    if (this.usesLegacyEventPersonState() || !Object.prototype.hasOwnProperty.call(properties, '$is_identified')) {
       properties['$is_identified'] = this._isIdentified()
     }
     // If the event has person processing, ensure that all future events will too
     if (hasPersonProcessing) {
       this._requirePersonProcessing('capture')
     }
+    return stampedOptions
+  }
+
+  // The capture options' `options` go on the message, which capture v1 sends as the event's options.
+  protected prepareMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const prepared = super.prepareMessage(message, options)
+    const eventOptions = eventOptionsOf(options)
+    if (eventOptions) {
+      prepared.options = { ...eventOptions }
+    }
+    return prepared
   }
 
   // A registered `$process_person_profile` is left off identity events: PostHog drops `$identify`, `$create_alias`
@@ -494,10 +565,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         this.setPersistedProperty(PostHogPersistedProperty.PersonMode, 'identified')
         this.reloadFeatureFlags()
 
-        super.identifyStateless(distinctId, allProperties, options)
-
-        // Update the cached person properties hash
-        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+        const newDistinctId = distinctId
+        this._captureWithPersonPropertiesHash(
+          this._surelyProcessesPerson(options)
+            ? getPersonPropertiesHash(newDistinctId, userPropsObj, userPropsOnceObj)
+            : null,
+          () => super.identifyStateless(newDistinctId, allProperties, options)
+        )
       } else if (shouldTransitionToIdentified) {
         // Matching id while still anonymous (e.g. a non-identified bootstrap seeded the same id):
         // upgrade to identified and emit one person-processed $set. There is no anonymous id to
@@ -507,11 +581,14 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         const setProps = userPropsObj || {}
         const setOnceProps = userPropsOnceObj || {}
         this.setPersonPropertiesForFlags({ $set: setProps, $set_once: setOnceProps }, false)
-        this.capture('$set', { $set: setProps, $set_once: setOnceProps })
-
-        // The transition event must fire even when an identical property call was cached earlier;
-        // cache only after capture so deduplication cannot suppress it.
-        this._cachedPersonProperties = getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+        // The transition event must fire even when an identical property call was cached earlier,
+        // so it skips the duplicate check and only records the hash once queued.
+        this._captureWithPersonPropertiesHash(
+          this._surelyProcessesPerson(options)
+            ? getPersonPropertiesHash(distinctId, userPropsObj, userPropsOnceObj)
+            : null,
+          () => this.capture('$set', { $set: setProps, $set_once: setOnceProps }, options)
+        )
 
         // The identified state itself is not part of the flags request; reload only when the
         // caller supplied properties that can affect flag evaluation.
@@ -521,7 +598,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       } else if (userPropsObj || userPropsOnceObj) {
         // If the distinct_id is not changing, but we have user properties to set, we can check if they have changed
         // and if so, send a $set event
-        this.setPersonProperties(userPropsObj, userPropsOnceObj)
+        this.setPersonProperties(userPropsObj, userPropsOnceObj, true, options)
       }
     })
   }
@@ -549,13 +626,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       ) {
         delete allProperties['$process_person_profile']
       }
-      this.stampPersonState(allProperties)
+      const stampedOptions = this.stampPersonState(allProperties, options)
 
-      super.captureStateless(distinctId, event, allProperties, options)
+      super.captureStateless(distinctId, event, allProperties, stampedOptions)
     })
   }
 
-  alias(alias: string): void {
+  alias(alias: string, options?: PostHogCaptureOptions): void {
     this.wrap(() => {
       if (!this._requirePersonProcessing('posthog.alias')) {
         return
@@ -564,7 +641,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       const distinctId = this.getDistinctId()
       const allProperties = this.enrichIdentityProperties({})
 
-      super.aliasStateless(alias, distinctId, allProperties)
+      super.aliasStateless(alias, distinctId, allProperties, options)
     })
   }
 
@@ -581,16 +658,16 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         $event_type: eventType,
         $elements: elements,
       }
-      if (!this.usesLegacyEventPersonState()) {
-        this.stampPersonState(autocaptureProperties)
-      }
+      const stampedOptions = this.usesLegacyEventPersonState()
+        ? options
+        : this.stampPersonState(autocaptureProperties, options)
       const payload = {
         distinct_id: distinctId,
         event: '$autocapture',
         properties: autocaptureProperties,
       }
 
-      this.enqueue('autocapture', payload, options)
+      this.enqueue('autocapture', payload, stampedOptions)
     })
   }
 
@@ -904,6 +981,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
+  /** The device's IANA time zone, such as `Europe/Berlin`, sent as `timezone` on `/flags` requests. */
+  protected getFlagsRequestTimezone(): string | undefined {
+    return undefined
+  }
+
   // An SDK can discard an obsolete result without recording it as a request failure.
   protected getFlagsForContext(
     ...args: Parameters<PostHogCoreStateless['getFlags']>
@@ -932,6 +1014,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
           // Only set by the React Native SDK; omitted from JSON when DeviceId is not persisted
           $device_id: deviceId ?? undefined,
+          ...maybeAdd('timezone', this.getFlagsRequestTimezone()),
           ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
@@ -952,10 +1035,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
             // Keep the persisted gate alongside the kept flags — a failed request is not a
             // signal that the server turned minimal flag-called events off.
+            const storedDetails = this.getStoredFlagDetails()
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
-              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
+              minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
+              noFlagsCached: !storedDetails || holdsNoCachedFlags(storedDetails),
             })
           }
           return undefined
@@ -965,10 +1050,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
         if (res?.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags)) {
           if (!this.disableRemoteFeatureFlags && !isForPreviousIdentity) {
+            const storedDetails = this.getStoredFlagDetails()
             this.setKnownFeatureFlagDetails({
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
-              minimalFlagCalledEvents: this.getStoredFlagDetails()?.minimalFlagCalledEvents,
+              minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
+              noFlagsCached: !storedDetails || holdsNoCachedFlags(storedDetails),
             })
           }
           this._logger.warn(
@@ -1158,10 +1245,18 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   /**
    * Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
    * the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
+   *
+   * Returns `undefined` while no flags are cached, such as before the first successful load or when no
+   * flags were bootstrapped, and a list, empty when no flags apply, once they are.
    */
-  getAllFeatureFlags(): FeatureFlagResult[] {
+  getAllFeatureFlags(): FeatureFlagResult[] | undefined {
+    const flags = this.getFeatureFlagDetails()?.flags
+    const storedDetails = this.getStoredFlagDetails()
+    if (!flags || (storedDetails && holdsNoCachedFlags(storedDetails))) {
+      return undefined
+    }
     return flagDetailsToResults(
-      this.getFeatureFlagDetails()?.flags ?? {},
+      flags,
       (payload) => this.decodeFeatureFlagPayload(payload),
       (value) => this.isFlagValueEnabled(value)
     )
@@ -1279,16 +1374,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
   }
 
-  /**
-   * Returns the current feature flag value. For backwards compatibility, a missing key can resolve
-   * to `false` once a non-empty flag response has been stored. Use `getFeatureFlagResult()` when
-   * code must distinguish a conclusive off result from an unavailable key.
-   */
+  /** Returns the current feature flag value, or `undefined` when no evaluation is available for the key. */
   getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
-    const result = this._getFeatureFlagResult(key, {
-      missingFlagBehavior: 'getFeatureFlag',
-      sendEvent: resolveSendFeatureFlagEvent(options),
-    })
+    const result = this._getFeatureFlagResult(key, { sendEvent: resolveSendFeatureFlagEvent(options) })
     return result?.variant ?? result?.enabled
   }
 
@@ -1334,8 +1422,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
   /**
    * Returns whether the current feature flag value is enabled. When no evaluation is available,
-   * `defaultValue` is returned if provided; without one, the legacy missing-key behavior of
-   * `getFeatureFlag()` applies.
+   * `defaultValue` is returned if provided; without one, `getFeatureFlag()` decides the result.
    */
   isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
@@ -1689,11 +1776,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
    *   If a property is previously set, this does not override that value.
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
   setPersonProperties(
     userPropertiesToSet?: { [key: string]: JsonType },
     userPropertiesToSetOnce?: { [key: string]: JsonType },
-    reloadFeatureFlags = true
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
   ): void {
     this.wrap(() => {
       const isSetEmpty = isNullish(userPropertiesToSet) || isEmptyObject(userPropertiesToSet)
@@ -1707,9 +1796,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const hash = getPersonPropertiesHash(this.getDistinctId(), userPropertiesToSet, userPropertiesToSetOnce)
+      const tracksHash = this._surelyProcessesPerson(options)
 
       // If exactly this $set call has been sent before, don't send it again - determine based on hash of properties
-      if (this._cachedPersonProperties === hash) {
+      if (tracksHash && this._cachedPersonProperties === hash) {
         this._logger.info(
           'A duplicate setPersonProperties call was made with the same properties. It has been ignored.'
         )
@@ -1722,10 +1812,56 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         reloadFeatureFlags
       )
 
-      this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} })
-
-      this._cachedPersonProperties = hash
+      // An update that may be personless leaves the person unchanged, so it must not suppress the next one.
+      this._captureWithPersonPropertiesHash(tracksHash ? hash : null, () =>
+        this.capture('$set', { $set: userPropertiesToSet || {}, $set_once: userPropertiesToSetOnce || {} }, options)
+      )
     })
+  }
+
+  /**
+   * Whether an update with these capture options surely processes the person: its
+   * `process_person_profile` option is missing, `null` or the Boolean `true`. Other values are not
+   * parsed, because PostHog decides how to read them. Used to skip a duplicate before capture; the
+   * event as sent decides whether the hash is recorded (see {@link _recordPersonPropertiesHash}).
+   */
+  private _surelyProcessesPerson(options?: PostHogCaptureOptionsWithEventOptions): boolean {
+    const eventOptions: unknown = options?.options
+    const setting: unknown = isObject(eventOptions) ? eventOptions.process_person_profile : undefined
+    return isNullish(setting) || setting === true
+  }
+
+  // Runs `capture`, which captures one person-properties update synchronously, so the update's hash is recorded
+  // or cleared once it is queued. An update that `before_send` drops, or that isn't queued, leaves the hash alone.
+  private _captureWithPersonPropertiesHash(hash: string | null, capture: () => void): void {
+    this._pendingPersonPropertiesHash = hash
+    try {
+      capture()
+    } finally {
+      this._pendingPersonPropertiesHash = undefined
+    }
+  }
+
+  /**
+   * Records the pending hash from the update as sent, after `before_send`, or clears the stored one. The update
+   * surely processes the person when it keeps its name and its distinct id, `$set` and `$set_once`, and its
+   * `process_person_profile` option (or, when that is missing or null, its `$process_person_profile` property)
+   * is missing, null or the Boolean `true`.
+   */
+  private _recordPersonPropertiesHash(
+    captured: { hash: string | null; event: unknown; payloadHash: string | null },
+    sent: PostHogEventProperties
+  ): void {
+    const option = isObject(sent.options) ? (sent.options as PostHogEventProperties).process_person_profile : undefined
+    const properties = (isObject(sent.properties) ? sent.properties : {}) as PostHogEventProperties
+    const setting = isNullish(option) ? properties.$process_person_profile : option
+    const surelyProcessesPerson =
+      captured.hash !== null &&
+      sent.event === captured.event &&
+      (isNullish(setting) || setting === true) &&
+      captured.payloadHash !== null &&
+      sentPersonPropertiesHash(sent) === captured.payloadHash
+    this._cachedPersonProperties = surelyProcessesPerson ? captured.hash : null
   }
 
   /**
@@ -1756,8 +1892,13 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    *
    * @param propertyNames - The name (or names) of the person properties to remove.
    * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
-  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
+  unsetPersonProperties(
+    propertyNames: string | string[],
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
+  ): void {
     this.wrap(() => {
       const names = (isArray(propertyNames) ? propertyNames : [propertyNames]).filter(
         (name) => isString(name) && name.length > 0
@@ -1784,7 +1925,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         this.reloadFeatureFlags()
       }
 
-      this.capture('$set', { $unset: names })
+      this.capture('$set', { $unset: names }, options)
 
       // Invalidate the setPersonProperties dedupe cache so a subsequent set of an unset
       // property is not skipped as a duplicate.
@@ -1801,10 +1942,24 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    * queued messages; type is a no-op, while library and library_version are only used as fallbacks
    * for the official properties.$lib and properties.$lib_version fields.
    * CaptureEvent exposes a subset matching the web SDK's
-   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp.
+   * CaptureResult: uuid, event, properties, $set, $set_once, timestamp, plus options when the event has them.
    * Note: $set/$set_once are extracted from properties.$set and properties.$set_once.
    */
   protected processBeforeEnqueue(message: PostHogEventProperties): PostHogEventProperties | null {
+    // Taken first, so a capture nested in `before_send` never records it.
+    const hash = this._pendingPersonPropertiesHash
+    this._pendingPersonPropertiesHash = undefined
+    // Read before `before_send`, which can change the message in place.
+    const captured =
+      hash === undefined ? undefined : { hash, event: message.event, payloadHash: sentPersonPropertiesHash(message) }
+    const result = this._runBeforeSendOnMessage(message)
+    if (result && captured) {
+      this._recordPersonPropertiesHash(captured, result)
+    }
+    return result
+  }
+
+  private _runBeforeSendOnMessage(message: PostHogEventProperties): PostHogEventProperties | null {
     if (!this._beforeSend) {
       return message
     }
@@ -1820,6 +1975,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       $set_once: props.$set_once as PostHogEventProperties | undefined,
       // Convert timestamp to Date if it's a string (from currentISOTime())
       timestamp: typeof timestamp === 'string' ? new Date(timestamp) : (timestamp as unknown as Date | undefined),
+    }
+    if (message.options !== undefined) {
+      captureEvent.options = message.options as CaptureEvent['options']
     }
 
     const result = this._runBeforeSend(captureEvent)
@@ -1848,6 +2006,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       event: result.event,
       properties: resultProps,
       timestamp: result.timestamp as unknown as JsonType,
+      ...(result.options !== undefined ? { options: result.options as JsonType } : {}),
     }
   }
 
@@ -1899,6 +2058,15 @@ export abstract class PostHogCore extends PostHogCoreBase {
     return this.loadFeatureFlagsAsync(sendAnonDistinctId)
   }
 
+  /**
+   * Returns all currently cached feature flags as `FeatureFlagResult`s, or an empty list while none are
+   * cached. This is a synchronous read of the flags from the last load (no network request) and does not
+   * send a `$feature_flag_called` event.
+   */
+  getAllFeatureFlags(): FeatureFlagResult[] {
+    return super.getAllFeatureFlags() ?? []
+  }
+
   onFeatureFlags(cb: (flags: PostHogFlagsResponse['featureFlags']) => void): () => void {
     return this.on('featureflags', async () => {
       const flags = this.getFeatureFlagValues()
@@ -1906,6 +2074,19 @@ export abstract class PostHogCore extends PostHogCoreBase {
         cb(flags)
       }
     })
+  }
+
+  /**
+   * Returns the current feature flag value. For backwards compatibility, a missing key can resolve
+   * to `false` once a non-empty flag response has been stored. Use `getFeatureFlagResult()` when
+   * code must distinguish a conclusive off result from an unavailable key.
+   */
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
+    const result = this._getFeatureFlagResult(key, {
+      missingFlagBehavior: 'getFeatureFlag',
+      sendEvent: resolveSendFeatureFlagEvent(options),
+    })
+    return result?.variant ?? result?.enabled
   }
 
   /**

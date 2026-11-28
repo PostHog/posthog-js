@@ -546,6 +546,30 @@ export interface ErrorTrackingOptions extends ExceptionRateLimiterConfig {
     captureExtensionExceptions?: boolean
 
     /**
+     * Release identity for manual and automatically captured exceptions only.
+     * Supply either a PostHog release id, or the name and version of a release that already
+     * exists in the project, as given to `posthog-cli` through `--release-name`,
+     * `--release-version`, and optional `--build`. A Git commit SHA can be used as the version.
+     * This option does not create releases. Create the release first, for example with
+     * `posthog-cli release resolve`.
+     *
+     * Explicit event, session, or super-property release identity takes precedence over this
+     * option, which takes precedence over a build-injected release id. Name/version configuration
+     * sends `$app_namespace`, `$app_version`, and optional `$app_build` instead of `$release_id`.
+     * Blank or incomplete configuration is ignored. Values are trimmed.
+     *
+     * @example
+     * ```js
+     * error_tracking: { release: { name: 'my-app', version: gitSha } }
+     * ```
+     *
+     * @default undefined
+     */
+    release?:
+        | { id: string; name?: never; version?: never; build?: never }
+        | { id?: never; name: string; version: string; build?: string }
+
+    /**
      * UNSTABLE: determines whether exception caused by the PostHog SDK will be captured
      *
      * @default false
@@ -2754,6 +2778,21 @@ export interface PostHogConfig {
      * @default true
      */
     __preview_replay_sync_fetch?: boolean
+
+    /**
+     * Private preview: return a recorded fetch response to the application before its body has been captured.
+     * Without it, a response is held until Replay finishes reading its body or the read times out, which
+     * delays streamed responses. In WebKit, aborting a request while its body is being read then rejects with
+     * a `TypeError` instead of an `AbortError`, so code that ignores aborts by checking `err.name` will report them.
+     * Requires `__preview_replay_sync_fetch`; without it, Replay keeps holding the response.
+     * Pair it with `session_recording.streamNetworkBody` so Replay stops reading a long-lived stream when its
+     * body read times out.
+     * Applied when the recorder installs its network observers, not a live remote kill switch.
+     *
+     * @default false
+     * @internal
+     */
+    __preview_replay_early_fetch_response?: boolean
 
     /**
      * @deprecated Use {@link tracing_headers} instead. Kept for backwards compatibility.

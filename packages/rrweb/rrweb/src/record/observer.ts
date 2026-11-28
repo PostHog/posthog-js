@@ -538,7 +538,7 @@ function initInputObserver({
     if (selectMaskingFn && tagName === 'SELECT') {
       // Flush callbacks before reading policy or selection, even with known IDs.
       if (mutationBuffers[0]?.isFrozen())
-        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+        [...mutationBuffers].forEach((buffer) => buffer.unfreeze());
       if (!active) return;
     }
     if (
@@ -582,7 +582,7 @@ function initInputObserver({
     ) {
       // Input normally unfreezes mutations at emission, too late for ID lookup.
       if (mutationBuffers[0]?.isFrozen()) {
-        mutationBuffers.forEach((buffer) => buffer.unfreeze());
+        [...mutationBuffers].forEach((buffer) => buffer.unfreeze());
         if (!active) return;
         // Emission callbacks can change the selection or its blocking rules.
         selectedOptions = getSelectedOptions(target as HTMLSelectElement);
@@ -1582,6 +1582,19 @@ function initStyleDeclarationObserver(
   });
 }
 
+// Not `instanceof HTMLMediaElement`: that is false for an element in another
+// realm, such as a same-origin iframe.
+function isMediaElement(
+  target: EventTarget | null,
+): target is HTMLMediaElement {
+  const tagName = (target as Partial<Element> | null)?.tagName;
+  if (typeof tagName !== 'string') {
+    return false;
+  }
+  const tagNameLower = toLowerCase(tagName);
+  return tagNameLower === 'video' || tagNameLower === 'audio';
+}
+
 function initMediaInteractionObserver({
   mediaInteractionCb,
   blockClass,
@@ -1595,16 +1608,15 @@ function initMediaInteractionObserver({
       callbackWrapper((event: Event) => {
         const target = getEventTarget(event);
         if (
-          !target ||
-          isBlocked(target as Node, blockClass, blockSelector, true)
+          !isMediaElement(target) ||
+          isBlocked(target, blockClass, blockSelector, true)
         ) {
           return;
         }
-        const { currentTime, volume, muted, playbackRate, loop } =
-          target as HTMLMediaElement;
+        const { currentTime, volume, muted, playbackRate, loop } = target;
         mediaInteractionCb({
           type,
-          id: mirror.getId(target as Node),
+          id: mirror.getId(target),
           currentTime,
           volume,
           muted,

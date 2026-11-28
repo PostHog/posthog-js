@@ -4,12 +4,12 @@
 
 - **Breaking:** stop loading `posthog-react-native-session-replay` when `@posthog/react-native-plugin` isn't installed — install `@posthog/react-native-plugin` 3.0 or later for session replay and native features
 - **Breaking:** require `@posthog/react-native-plugin` 3.0 or later
+- **Breaking:** ignore `@posthog/react-native-plugin` older than 3.0 and log a warning to upgrade, leaving session replay and other native features off
 - **Breaking:** remove the `PostHogProvider` `apiKey` prop — pass `projectToken` instead
 - **Breaking:** remove `evaluationEnvironments` from the `PostHogOptions` type — pass `evaluationContexts` instead
 - **Breaking:** remove `disableRemoteConfig`, which had no effect, from the `PostHogOptions` type
 - **Breaking:** remove `sessionReplayConfig.iOSdebouncerDelayMs` and `androidDebouncerDelayMs` — pass `throttleDelayMs` instead
 - **Breaking:** remove `sessionReplayConfig.screenshotModeBackgroundCapture`, because posthog-ios 4.0 removed background capture — delete it, or try experimental `iOSCaptureMethod: 'gpu'`
-- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - **Breaking:** remove the `autocapture.navigationRef` option and the `PostHogNavigationRef` type, and drop the `navigationRef` argument from `useNavigationTracker(options, client)`
 - **Breaking:** `onFeatureFlags` callbacks receive one object, `{ flags, variants, errorsLoading }`, like posthog-ios, posthog-android and posthog_flutter: `flags` lists the enabled flag keys, `variants` maps them to `true` or their variant, and `errorsLoading` is `true` when the latest load failed (the values are then the last known ones). Disabled flags and flags whose variant is an empty string are left out. Replace `onFeatureFlags((flags) => …)` with `onFeatureFlags(({ flags, variants, errorsLoading }) => …)`
 - **Breaking:** a callback registered after flags have loaded is also called once with the current values, right after `onFeatureFlags` returns
@@ -18,6 +18,9 @@
 - **Breaking:** a flag whose variant is an empty string reads as disabled (`enabled: false`) in `getFeatureFlagResult()`, `getAllFeatureFlags()` and `useFeatureFlagResult()`, as it already did in `isFeatureEnabled()`, like posthog-ios and posthog-android 4.0
 - **Breaking:** leave disabled flags and flags whose variant is an empty string out of `$active_feature_flags`, like posthog-ios and posthog-android
 - **Breaking:** keep a string payload in `bootstrap.featureFlagPayloads` as a string instead of parsing it as JSON, like posthog-ios 4.0 — pass decoded values, such as `{ color: 'blue' }` instead of `'{"color":"blue"}'`
+- **Breaking:** `getAllFeatureFlags()` returns `undefined` instead of an empty list before flags first load — use `posthog.getAllFeatureFlags() ?? []` where you only iterate
+- **Breaking:** `getFeatureFlag()` returns `undefined` instead of `false` for a flag that isn't in the loaded flags, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key)?.enabled === false` to check that a flag is off
+- **Breaking:** `isFeatureEnabled()` without a `defaultValue` returns `false` instead of `undefined` when the flag has no value, such as before flags load, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key) === undefined` to check that a flag has no value yet
 - **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
 - **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`
@@ -28,17 +31,21 @@
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off. For a flag that isn't in the loaded flags, both return `undefined` (or the default you pass to `useFeatureFlagEnabled()`) where `useFeatureFlag()` returned `false`
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
-- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` value counts as unset
+- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` `$process_person_profile` counts as unset, and a `null` `$is_identified` sends the event without it
 - **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
-- **Breaking:** add `$process_person_profile` and `$is_identified` to `$autocapture` events, so anonymous autocapture follows `personProfiles: 'identified_only'` like other events
+- **Breaking:** send person processing as posthog-ios and posthog-android 4.0 do: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none. Events no longer carry a `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person
+- **Breaking:** add `$is_identified` to `$autocapture` events, and send them with the `process_person_profile: false` option for anonymous users under `personProfiles: 'identified_only'`, so anonymous autocapture follows the policy like other events
 - **Breaking:** leave `null` and `undefined` property values off events; `$set`, `$set_once` and `$group_set` keep their `null` values, which clear the person or group property
 - **Breaking:** send events to capture v1 (`/i/v1/analytics/events`) instead of `/batch/`, authenticated with `Authorization: Bearer <projectToken>` — serve this path on reverse proxies and self-hosted instances
 - **Breaking:** `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; other `requestHeaders` still do
+- **Breaking:** PostHog drops an event whose distinct ID or event name is over 200 UTF-8 bytes, such as one with a JWT as its distinct ID, and `posthog.on('error')` reports it. 4.x shortened a long distinct ID and kept the event
+- **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
 - **Breaking:** a personal API key (`phx_...`) passed as the project token disables the client and logs an error, like posthog-node, posthog-ios and posthog-android, instead of being sent to PostHog
 - **Breaking:** `captureTraceFeedback()` and `captureTraceMetric()` send `$ai_feedback` and `$ai_metric` through `captureAi()` to the AI endpoint instead of the analytics endpoint
+- Add `sessionReplayConfig.iOSCaptureMethod` to choose how iOS captures replay screenshots: `'standard'` (default) or experimental `'gpu'`
 - Add the `useFeatureFlagEnabled()`, `useFeatureFlagVariantKey()`, `useFeatureFlagPayload()` and `useActiveFeatureFlags()` hooks, matching `@posthog/react`
 - Fix `onFeatureFlags` callbacks and flag reads returning the previous user's flags when `reset()` runs during a flag request
 - Keep events queued when a send gets no response, a 404, 408, 429, 500, 502, 503 or 504, or a `retry` result, and send them again after a wait of 1 second doubling to 30 seconds (longer if the server's `Retry-After` asks, up to 30 seconds), with no attempt limit. `flush()` during that wait resolves without sending, and `shutdown()` waits it out when it fits in its timeout
@@ -49,3 +56,4 @@
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them
 - Gzip analytics and AI requests on iOS and Android when `@posthog/react-native-plugin` 3.0 or later is installed; without it they're sent uncompressed, as in 4.x
 - Send AI events again in batches half the size after a request reaches `captureAiRequestTimeoutMs`, so a slow network still delivers them, and return to full-size batches as later sends get through; a single AI event that still times out is kept and sent again after the AI events queued behind it
+- Send the device time zone as `timezone` with `/flags` requests, like posthog-ios and posthog-android; set `$timezone` to `null` in `customAppProperties` to leave it out

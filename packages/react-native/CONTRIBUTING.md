@@ -6,7 +6,7 @@ For repository-wide setup, see the root [CONTRIBUTING.md](../../CONTRIBUTING.md)
 
 ## Running the sample app with Expo
 
-See [Example Expo 53](../../examples/example-expo-53/README.md).
+See [Example Expo 57](../../examples/example-expo-57/README.md).
 
 ## CI-aligned checks
 

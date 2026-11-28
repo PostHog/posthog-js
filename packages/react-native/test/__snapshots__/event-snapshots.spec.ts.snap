@@ -124,9 +124,7 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
       {
         "distinct_id": "identified-snapshot-id",
         "event": "$feature_flag_called",
-        "options": {
-          "process_person_profile": true,
-        },
+        "options": {},
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -166,9 +164,7 @@ exports[`PostHog React Native event and request snapshots > snapshots complete e
       {
         "distinct_id": "identified-snapshot-id",
         "event": "$exception",
-        "options": {
-          "process_person_profile": true,
-        },
+        "options": {},
         "properties": {
           "$active_feature_flags": [
             "checkout-flow",
@@ -276,6 +272,7 @@ exports[`PostHog React Native event and request snapshots > snapshots the comple
       "email": "flags@example.com",
       "plan": "pro",
     },
+    "timezone": "UTC",
     "token": "snapshot-project-token",
   },
   "headers": {
