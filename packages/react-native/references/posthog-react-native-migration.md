@@ -25,9 +25,12 @@ You need to change code or configuration if your app does any of these:
 - reads a feature flag payload that isn't valid JSON, or bootstraps string payloads
 - reads `enabled` from `getFeatureFlagResult()` or `getAllFeatureFlags()` for a flag whose variant is an empty string, or filters on `$active_feature_flags`
 - sets `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` or a `PostHog-` header the SDK sets in `requestHeaders` and expects capture requests to carry it
+- relies on the default `flushInterval` (10 seconds) or `maxBatchSize` (100) (see [Event delivery](#event-delivery))
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events, or calls `captureTraceFeedback()` or `captureTraceMetric()` (see [AI events](#ai-events))
 - registers `$is_identified` or `$process_person_profile`, or sends `null` property values (see [Event properties](#event-properties))
+- calls `identify()` without a distinct ID (see [`identify()`](#identify))
+- filters insights on `$used_bootstrap_value` (see [Event properties](#event-properties))
 - sends distinct IDs or event names over 200 UTF-8 bytes, such as a JWT as the distinct ID (see [Event delivery](#event-delivery))
 
 ## Reverse proxies and self-hosted PostHog
@@ -202,6 +205,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 
 ## Event delivery
 
+- Queued events are sent every 30 seconds instead of every 10, and at most 50 per request instead of 100, like posthog-ios and posthog-android. Pass `flushInterval: 10000` and `maxBatchSize: 100` to keep the 4.x timing. A queue of `flushAt` events (20 by default) is still sent right away.
 - `Authorization`, `User-Agent`, `Content-Type`, `Content-Encoding` and the `PostHog-` headers the SDK sets no longer reach capture requests from `requestHeaders`; the SDK sets its own. Other `requestHeaders` still do, and feature flag requests still get all of them.
 - Events stay queued when a send gets no response, a `404`, `408`, `429`, `500`, `502`, `503` or `504`, or a `retry` result. They're sent again after a wait of about 1 second doubling to 30 seconds, longer if the server's `Retry-After` asks (up to 30 seconds), with no attempt limit. `fetchRetryCount` and `fetchRetryDelay` no longer apply to events.
 - `flush()` and `shutdown()` no longer reject when delivery fails. Events either stay queued for a later send or are dropped and reported through `posthog.on('error')`.
@@ -219,6 +223,18 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - PostHog drops an event whose distinct ID or name is over 200 UTF-8 bytes (`distinct_id_too_large`, `event_name_too_long`), and `posthog.on('error')` reports it. 4.x capture shortened the distinct ID and kept the event.
 - Each request carries up to 5 MiB of events. A batch that gets a `413` is split and sent again; a single event that gets a `413` is dropped.
 
+## `identify()`
+
+`identify()` takes a required distinct ID, like posthog-ios, posthog-android and posthog_flutter. In 4.x the type let you leave it out: `identify()` did nothing, and `identify(undefined, properties)` set person properties. Call `setPersonProperties()` for that instead.
+
+```ts
+// 4.x
+posthog.identify(undefined, { plan: 'pro' })
+
+// 5.0
+posthog.setPersonProperties({ plan: 'pro' })
+```
+
 ## Event properties
 
 5.0 sets person properties on events the way posthog-ios 4.0, posthog-android 4.0 and posthog_flutter 6.0 do:
@@ -228,6 +244,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - Person processing is sent as posthog-ios and posthog-android 4.0 send it: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none, since PostHog processes the person by default. In 4.x every event carried a `$process_person_profile` property of `true` or `false`. Now events carry no `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person.
 - `$autocapture` events carry `$is_identified`, and get the `process_person_profile: false` option when the person isn't processed, like other events, so anonymous autocapture follows `personProfiles: 'identified_only'`. In 4.x they carried neither, and PostHog processed the person.
 - `null` and `undefined` property values are left off events, except inside `$set`, `$set_once` and `$group_set`, where a `null` still clears the property. Array elements keep their positions.
+- `$feature_flag_called` events carry `$used_bootstrap_value` only for a flag set in `bootstrap.featureFlags`, as posthog-ios and posthog-android send it. In 4.x every `$feature_flag_called` event carried it. Filter on `$feature_flag_bootstrapped_response` being set to find flag calls for bootstrapped flags.
 
 ### Per-event options
 

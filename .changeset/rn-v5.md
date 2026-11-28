@@ -21,7 +21,9 @@
 - **Breaking:** `getAllFeatureFlags()` returns `undefined` instead of an empty list before flags first load — use `posthog.getAllFeatureFlags() ?? []` where you only iterate
 - **Breaking:** `getFeatureFlag()` returns `undefined` instead of `false` for a flag that isn't in the loaded flags, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key)?.enabled === false` to check that a flag is off
 - **Breaking:** `isFeatureEnabled()` without a `defaultValue` returns `false` instead of `undefined` when the flag has no value, such as before flags load, like posthog-ios, posthog-android and posthog_flutter — use `getFeatureFlagResult(key) === undefined` to check that a flag has no value yet
+- **Breaking:** `$feature_flag_called` events carry `$used_bootstrap_value` only for a flag set in `bootstrap.featureFlags`, like posthog-ios and posthog-android
 - **Breaking:** `getFeatureFlagDetails()` is internal and can change in any release — use `getAllFeatureFlags()`
+- **Breaking:** `identify()` requires a distinct ID in its type, like posthog-ios, posthog-android and posthog_flutter — replace `identify(undefined, properties)` with `setPersonProperties(properties)`
 - **Breaking:** `PostHog` extends `PostHogCoreBase` from `@posthog/core` instead of `PostHogCore`, which only matters to code that refers to those types
 - **Breaking:** rename the per-call `sendEvent` option of `getFeatureFlag()`, `getFeatureFlagResult()` and `isFeatureEnabled()` to `sendFeatureFlagEvent`
 - **Breaking:** remove `getFeatureFlagPayload()` — use `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`
@@ -31,7 +33,7 @@
 - **Breaking:** remove the `useFeatureFlagWithPayload()` hook and its `FeatureFlagWithPayload` type — use `useFeatureFlagResult()`
 - **Breaking:** remove the `useFeatureFlag()` hook — use `useFeatureFlagVariantKey(key)` for the value or `useFeatureFlagEnabled(key)` for on/off. For a flag that isn't in the loaded flags, both return `undefined` (or the default you pass to `useFeatureFlagEnabled()`) where `useFeatureFlag()` returned `false`
 - **Breaking:** remove the `useFeatureFlags()` hook — use `useActiveFeatureFlags()` for the enabled flag keys
-- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` `$process_person_profile` counts as unset, and a `null` `$is_identified` sends the event without it
+- **Breaking:** let a registered or caller `$is_identified` or `$process_person_profile` property replace the SDK's value on that event; a `null` `$process_person_profile` counts as unset, and a `null` `$is_identified` sends the event without it, including a fatal exception the native SDK sends
 - **Breaking:** leave a registered `$process_person_profile` off `$identify`, `$create_alias`, `$groupidentify`, `$set`, `$set_once` and `$merge_dangerously` events, so registering `false` no longer stops `identify()`, `alias()`, `group()` and `setPersonProperties()` from working; a `before_send` hook can still set it
 - **Breaking:** send person processing as posthog-ios and posthog-android 4.0 do: an event that doesn't process the person gets the `process_person_profile: false` capture v1 option, and one that does gets none. Events no longer carry a `$process_person_profile` property unless you set one, so `before_send` doesn't see it, and removing or changing `$process_person_profile` there doesn't make a personless event process the person
 - **Breaking:** add `$is_identified` to `$autocapture` events, and send them with the `process_person_profile: false` option for anonymous users under `personProfiles: 'identified_only'`, so anonymous autocapture follows the policy like other events
@@ -41,6 +43,7 @@
 - **Breaking:** PostHog drops an event whose distinct ID or event name is over 200 UTF-8 bytes, such as one with a JWT as its distinct ID, and `posthog.on('error')` reports it. 4.x shortened a long distinct ID and kept the event
 - **Breaking:** a `uuid` you pass to `capture()` or another event method is sent in lowercase
 - **Breaking:** `flush()` and `shutdown()` no longer reject when a send fails: events kept for a later send stay queued, and dropped events (for example after a `400` or `401`) are reported on `posthog.on('error')` instead
+- **Breaking:** send queued events every 30 seconds instead of every 10, and at most 50 per request instead of 100, like posthog-ios and posthog-android — pass `flushInterval: 10000` and `maxBatchSize: 100` to keep the 4.x timing
 - **Breaking:** `fetchRetryCount` and `fetchRetryDelay` no longer apply to event delivery
 - **Breaking:** `posthog.on('error')` no longer fires for network errors or retryable statuses while events stay queued; it still fires for dropped events, with an error carrying `drops`, `requestId`, `retryExhausted` and `cause` instead of `response`
 - **Breaking:** a personal API key (`phx_...`) passed as the project token disables the client and logs an error, like posthog-node, posthog-ios and posthog-android, instead of being sent to PostHog

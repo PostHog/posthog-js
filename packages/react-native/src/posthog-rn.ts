@@ -222,7 +222,23 @@ type ManualRecordingStartRequest = {
   awaitEventTrigger?: boolean
 }
 
+// The batching defaults of posthog-ios and posthog-android.
+const DEFAULT_FLUSH_INTERVAL_MS = 30000
+const DEFAULT_MAX_BATCH_SIZE = 50
+
 export interface PostHogOptions extends Omit<PostHogCoreOptions, 'evaluationEnvironments' | 'disableRemoteConfig'> {
+  /**
+   * The interval in milliseconds between periodic flushes
+   *
+   * @default 30000
+   */
+  flushInterval?: number
+  /**
+   * The maximum number of queued messages to be flushed as part of a single batch (must be higher than `flushAt`)
+   *
+   * @default 50
+   */
+  maxBatchSize?: number
   /**
    * Allows you to provide the storage type.
    * 'file' will try to load the best available storage, the provided 'customStorage', 'customAsyncStorage' or in-memory storage.
@@ -629,7 +645,12 @@ export class PostHog extends PostHogCoreBase {
       )
     }
 
-    super(normalizedProjectToken, personalApiKey ? { ...options, disabled: true } : options)
+    const batchingOptions: PostHogOptions = {
+      ...options,
+      flushInterval: options?.flushInterval ?? DEFAULT_FLUSH_INTERVAL_MS,
+      maxBatchSize: options?.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE,
+    }
+    super(normalizedProjectToken, personalApiKey ? { ...batchingOptions, disabled: true } : batchingOptions)
     this.on('featureflags', () => {
       this._featureFlagsLoaded = true
     })
@@ -1316,8 +1337,8 @@ export class PostHog extends PostHogCoreBase {
       {
         // A queue smaller than flushAt would evict events before a count flush could send them.
         flushAt: Math.min(this.flushAt, maxQueueSize),
-        maxBatchSize: Math.max(this.flushAt, options?.maxBatchSize ?? 100),
-        flushIntervalMs: options?.flushInterval ?? 10000,
+        maxBatchSize: Math.max(this.flushAt, options?.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE),
+        flushIntervalMs: options?.flushInterval ?? DEFAULT_FLUSH_INTERVAL_MS,
         maxQueueSize,
         maxEventBytes: Math.floor(maxEventBytes),
       },
@@ -3265,7 +3286,7 @@ export class PostHog extends PostHogCoreBase {
    * @param properties - Optional dictionary with key:value pairs to set the person properties
    * @param options - Optional capture options
    */
-  identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+  identify(distinctId: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
 
     // Extract $set_once before super.identify() because core deletes it from the properties object
@@ -4544,7 +4565,9 @@ export class PostHog extends PostHogCoreBase {
           // state, which knows nothing of JS identity, so both are sent explicitly. The person
           // processing is the event's `process_person_profile` option, which wins over the property
           // as on capture v1, else the property, else `true`, since PostHog processes the person
-          // when both are missing.
+          // when both are missing. An event without `$is_identified` (a caller or registered null,
+          // or a `before_send` that removed it) hands native a null, which native omits as the JS
+          // queue does.
           const eventOptions = isObject(processed.options) ? (processed.options as PostHogEventProperties) : {}
           const properties =
             isObject(nativeProperties) && !Array.isArray(nativeProperties)
@@ -4557,12 +4580,20 @@ export class PostHog extends PostHogCoreBase {
                   ...properties,
                   $process_person_profile:
                     eventOptions.process_person_profile ?? properties['$process_person_profile'] ?? true,
-                  $is_identified: properties['$is_identified'] ?? this._isIdentified(),
                 }
               : nativeProperties,
           }
+          const cleanedPayload = withoutNullProperties(nativePayload) ?? nativePayload
           observation.nativeCapture = observation.prepareNativeCapture(
-            withoutNullProperties(nativePayload) ?? nativePayload
+            properties
+              ? {
+                  ...cleanedPayload,
+                  properties: {
+                    ...(cleanedPayload.properties as PostHogEventProperties),
+                    $is_identified: properties['$is_identified'] ?? null,
+                  },
+                }
+              : cleanedPayload
           )
         } catch (e) {
           this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)
