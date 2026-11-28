@@ -2313,6 +2313,69 @@ export class PostHog extends PostHogCoreBase {
   }
 
   /**
+   * Captures a `$feature_view` event when the user sees the feature behind a feature flag.
+   *
+   * The event carries `feature_flag` and, for multivariate flags, `feature_flag_variant`, and sets the
+   * person property `$feature_view/<flag>` to the variant. Without `flagVariant`, the SDK reads the flag's
+   * current value without capturing `$feature_flag_called`, and skips the event when the flag has no value.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * posthog.captureFeatureView('new-checkout')
+   * ```
+   *
+   * @public
+   *
+   * @param flag The feature flag key
+   * @param flagVariant The variant the user saw. Defaults to the flag's current value.
+   */
+  captureFeatureView(flag: string, flagVariant?: string): void {
+    this._captureFeatureEvent('$feature_view', flag, flagVariant)
+  }
+
+  /**
+   * Captures a `$feature_interaction` event when the user interacts with the feature behind a feature flag.
+   *
+   * The event carries `feature_flag` and, for multivariate flags, `feature_flag_variant`, and sets the
+   * person property `$feature_interaction/<flag>` to the variant. Without `flagVariant`, the SDK reads the
+   * flag's current value without capturing `$feature_flag_called`, and skips the event when the flag has no value.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * <Button onPress={() => posthog.captureFeatureInteraction('new-checkout')} title="Checkout" />
+   * ```
+   *
+   * @public
+   *
+   * @param flag The feature flag key
+   * @param flagVariant The variant the user interacted with. Defaults to the flag's current value.
+   */
+  captureFeatureInteraction(flag: string, flagVariant?: string): void {
+    this._captureFeatureEvent('$feature_interaction', flag, flagVariant)
+  }
+
+  private _captureFeatureEvent(
+    event: '$feature_view' | '$feature_interaction',
+    flag: string,
+    flagVariant: string | undefined
+  ): void {
+    const variant = flagVariant ?? this.getFeatureFlag(flag, { sendFeatureFlagEvent: false })
+    if (variant === undefined) {
+      this._logger.info(`Skipping ${event} for flag "${flag}": the flag has no value.`)
+      return
+    }
+    this.capture(event, {
+      feature_flag: flag,
+      ...(typeof variant === 'string' ? { feature_flag_variant: variant } : {}),
+      $set: { [`${event}/${flag}`]: variant },
+    })
+  }
+
+  /**
    * Reloads feature flags from the server.
    *
    * PostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag.

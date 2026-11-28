@@ -55,3 +55,4 @@
 - Report AI events dropped before sending (invalid, unserializable, too large, or pushed out of a full queue) on `posthog.on('error')`, like posthog-node
 - `capture()` keeps sending `$ai_*` events to the analytics endpoint; use `captureAi()` for them
 - Send the device time zone as `timezone` with `/flags` requests, like posthog-ios and posthog-android; set `$timezone` to `null` in `customAppProperties` to leave it out
+- Add `captureFeatureView(flag, flagVariant?)` and `captureFeatureInteraction(flag, flagVariant?)`, like posthog-ios and posthog-android: they capture `$feature_view` and `$feature_interaction` with `feature_flag` and `feature_flag_variant`, and set the `$feature_view/<flag>` or `$feature_interaction/<flag>` person property to the variant. Without `flagVariant` they read the flag without capturing `$feature_flag_called`, and skip the event when the flag has no value
