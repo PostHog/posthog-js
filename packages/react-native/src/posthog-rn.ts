@@ -4544,7 +4544,9 @@ export class PostHog extends PostHogCoreBase {
           // state, which knows nothing of JS identity, so both are sent explicitly. The person
           // processing is the event's `process_person_profile` option, which wins over the property
           // as on capture v1, else the property, else `true`, since PostHog processes the person
-          // when both are missing.
+          // when both are missing. An event without `$is_identified` (a caller or registered null,
+          // or a `before_send` that removed it) hands native a null, which native omits as the JS
+          // queue does.
           const eventOptions = isObject(processed.options) ? (processed.options as PostHogEventProperties) : {}
           const properties =
             isObject(nativeProperties) && !Array.isArray(nativeProperties)
@@ -4557,12 +4559,20 @@ export class PostHog extends PostHogCoreBase {
                   ...properties,
                   $process_person_profile:
                     eventOptions.process_person_profile ?? properties['$process_person_profile'] ?? true,
-                  $is_identified: properties['$is_identified'] ?? this._isIdentified(),
                 }
               : nativeProperties,
           }
+          const cleanedPayload = withoutNullProperties(nativePayload) ?? nativePayload
           observation.nativeCapture = observation.prepareNativeCapture(
-            withoutNullProperties(nativePayload) ?? nativePayload
+            properties
+              ? {
+                  ...cleanedPayload,
+                  properties: {
+                    ...(cleanedPayload.properties as PostHogEventProperties),
+                    $is_identified: properties['$is_identified'] ?? null,
+                  },
+                }
+              : cleanedPayload
           )
         } catch (e) {
           this._logger.warn(`Fatal exception payload could not be prepared for native capture: ${e}`)

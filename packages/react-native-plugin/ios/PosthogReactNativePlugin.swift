@@ -380,8 +380,13 @@ public class PosthogReactNativePlugin: RCTEventEmitter {
                 // app's `before_send` rewrote. Put the JS-approved values back. On Android,
                 // caller properties already win apart from SDK debug properties, so the
                 // module there only restores `$process_person_profile` and `$is_identified`.
+                // A null `$is_identified` from JS removes native's value, as on Android.
                 for (key, value) in jsProperties {
-                    event.properties[key] = value
+                    if key == "$is_identified", value is NSNull {
+                        event.properties.removeValue(forKey: key)
+                    } else {
+                        event.properties[key] = value
+                    }
                 }
                 return event
             }
