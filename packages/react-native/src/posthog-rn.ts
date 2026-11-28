@@ -138,6 +138,20 @@ const OPTIONAL_REPLAY_DEBUG_PROPERTIES = new Set([
   '$sdk_debug_replay_pending_trigger_conditions',
 ])
 const EVENTS_WITHOUT_REPLAY_DEBUG_PROPERTIES = ['$feature_flag_called', '$snapshot']
+const UUIDV7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+// The start time of the session an event's own `$session_id` names, while the SDK reports one: the SDK session's
+// start, or for a registered or caller session id, the time its UUIDv7 embeds, or `undefined` when it is not a UUIDv7.
+const sessionStartOf = (
+  eventSessionId: JsonType | undefined,
+  sdkSessionId: unknown,
+  sdkSessionStart: JsonType | undefined
+): JsonType | undefined => {
+  if (sdkSessionStart === undefined || typeof eventSessionId !== 'string' || eventSessionId === sdkSessionId) {
+    return sdkSessionStart
+  }
+  return UUIDV7_PATTERN.test(eventSessionId) ? parseInt(eventSessionId.replace(/-/g, '').slice(0, 12), 16) : undefined
+}
 
 // A null person or group property clears it, so these keep their nulls, as in posthog-ios 4.0.
 const NULL_PRESERVING_PROPERTY_KEYS = ['$set', '$set_once', '$group_set']
@@ -194,9 +208,6 @@ const omitProperties = (properties: JsonType, shouldOmit: (key: string) => boole
 }
 
 const withoutDebugProperties = (properties: JsonType): JsonType => omitProperties(properties, isDebugPropertyKey)
-
-const withoutOptionalReplayDebugProperties = (properties: JsonType): JsonType =>
-  omitProperties(properties, (key) => OPTIONAL_REPLAY_DEBUG_PROPERTIES.has(key))
 
 type SessionReplayTriggerStatus = 'trigger_disabled' | 'trigger_pending' | 'trigger_activated'
 
@@ -1389,11 +1400,7 @@ export class PostHog extends PostHogCoreBase {
     return {
       ...super.getCommonEventProperties(),
       ...this._appProperties,
-      // A registered $app_language wins, as on the native SDKs. Common properties override
-      // registered and session ones, so skip ours rather than overwrite it.
-      ...(this._appLanguage !== undefined &&
-        this.props.$app_language === undefined &&
-        this.sessionProps.$app_language === undefined && { $app_language: this._appLanguage }),
+      ...(this._appLanguage !== undefined && { $app_language: this._appLanguage }),
       $screen_height: height,
       $screen_width: width,
     }
@@ -1414,22 +1421,35 @@ export class PostHog extends PostHogCoreBase {
     }
   }
 
-  // The replay debug keys are SDK-owned, so they land after the caller's properties (where
-  // posthog-js sets them too) on every enqueue path, including autocapture, which skips
-  // buildPayload. A minimal $feature_flag_called envelope stays minimal.
-  private _stampReplayDebugProperties(message: PostHogEventProperties): void {
-    const properties = (message.properties ?? {}) as { [key: string]: JsonType }
+  // The replay debug keys are stamped on every enqueue path, including autocapture, which skips
+  // buildPayload. A registered or caller value of the same name wins, except for
+  // `$sdk_debug_pending_queue_size`: the SDK's depth replaces it, and a healthy queue leaves it off. The optional bundle goes only on an event that claimed it. `$snapshot` and a
+  // minimal $feature_flag_called envelope get none.
+  private _stampReplayDebugProperties(message: PostHogEventProperties, includeOptionalBundle: boolean): void {
+    const properties = (message.properties ?? {}) as { [key: string]: JsonType | undefined }
     if (
-      message.event === '$feature_flag_called' &&
-      properties.$feature_flag_has_experiment === false &&
-      this.isMinimalFlagCalledEventsEnabled()
+      message.event === '$snapshot' ||
+      (message.event === '$feature_flag_called' &&
+        properties.$feature_flag_has_experiment === false &&
+        this.isMinimalFlagCalledEventsEnabled())
     ) {
       return
     }
-    message.properties = {
-      ...properties,
-      ...(this._sessionReplayDebugProperties() as { [key: string]: JsonType }),
+    const stamped = { ...properties }
+    const debugProperties = this._sessionReplayDebugProperties()
+    debugProperties.$sdk_debug_session_start = sessionStartOf(
+      stamped.$session_id,
+      this.getPersistedProperty(PostHogPersistedProperty.SessionId),
+      debugProperties.$sdk_debug_session_start
+    )
+    for (const [key, value] of Object.entries(debugProperties)) {
+      if (key === '$sdk_debug_pending_queue_size') {
+        stamped[key] = value
+      } else if ((includeOptionalBundle || !OPTIONAL_REPLAY_DEBUG_PROPERTIES.has(key)) && stamped[key] == null) {
+        stamped[key] = value
+      }
     }
+    message.properties = stamped as { [key: string]: JsonType }
   }
 
   // Runs once per enqueued event on the hot path, so it only reads state: no getSessionId()
@@ -4512,10 +4532,10 @@ export class PostHog extends PostHogCoreBase {
     message: PostHogEventProperties,
     deferEventTrigger = false
   ): PostHogEventProperties | null {
-    this._stampReplayDebugProperties(message)
     const claimedBundle = this._claimReplayDebugBundle(message)
     let accepted = false
     try {
+      this._stampReplayDebugProperties(message, claimedBundle)
       const observation = this._fatalCaptureObservation
       const isObservedFatal =
         observation !== undefined && message.uuid === observation.eventUuid && message.event === '$exception'
@@ -4601,8 +4621,6 @@ export class PostHog extends PostHogCoreBase {
       this._replayDebugBundleClaimed = true
     } else if (message.event === '$snapshot') {
       message.properties = withoutDebugProperties(message.properties)
-    } else {
-      message.properties = withoutOptionalReplayDebugProperties(message.properties)
     }
     return claimed
   }
@@ -4669,9 +4687,10 @@ export class PostHog extends PostHogCoreBase {
     if (!this._sessionReplayEventTriggers.includes(eventName)) {
       return
     }
-    // Use super.getSessionId() (not this.getSessionId()) deliberately: the capture path already ran the
-    // overriding getSessionId() during enrichProperties, so rotation handling has fired and the id is
-    // synced. Calling the override again here would re-enter rotation logic from inside capture.
+    // Use super.getSessionId() (not this.getSessionId()) deliberately: unless a registered or caller
+    // `$session_id` won, the capture path already ran the overriding getSessionId() during
+    // enrichProperties, so rotation handling has fired and the id is synced. Calling the override again
+    // here would re-enter rotation logic from inside capture.
     const sessionId = super.getSessionId()
     if (!sessionId) {
       return

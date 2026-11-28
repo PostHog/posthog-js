@@ -87,6 +87,20 @@ const eventOptionsOf = (options?: PostHogCaptureOptions): { [key: string]: JsonT
 // Events that identify, alias, merge or update a person or group.
 const IDENTITY_EVENTS = ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']
 
+const isFilledString = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+
+// Fills the SDK's own `$lib` and `$lib_version` as a pair, as posthog-ios and posthog-android 4.0 do: an event without
+// a `$lib` gets both, an event naming this SDK's `$lib` without a version gets the version, and another library's
+// `$lib` is left as it is.
+function fillLibraryIdentity(properties: PostHogEventProperties, lib: JsonType, libVersion: JsonType): void {
+  if (!isFilledString(properties.$lib)) {
+    properties.$lib = lib
+    properties.$lib_version = libVersion
+  } else if (properties.$lib === lib && !isFilledString(properties.$lib_version)) {
+    properties.$lib_version = libVersion
+  }
+}
+
 // The person-properties hash of a queued message's distinct id, `$set` and `$set_once`, or null when either isn't an object.
 function sentPersonPropertiesHash(message: PostHogEventProperties): string | null {
   const properties = (isObject(message.properties) ? message.properties : {}) as PostHogEventProperties
@@ -330,15 +344,50 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
   }
 
-  private enrichProperties(properties?: PostHogEventProperties): PostHogEventProperties {
+  private enrichProperties(
+    properties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): PostHogEventProperties {
     const userProperties = properties || {}
-    return {
-      ...this.props, // Persisted properties first
-      ...this.sessionProps, // Followed by session properties
-      ...this.getCommonEventProperties(), // Followed by SDK context and FF props
-      ...userProperties, // User specified properties win over all of the above
-      $session_id: this.getSessionId(),
+    if (this.usesLegacyEventPropertyOrder()) {
+      return {
+        ...this.props, // Persisted properties first
+        ...this.sessionProps, // Followed by session properties
+        ...this.getCommonEventProperties(), // Followed by SDK context and FF props
+        ...userProperties, // User specified properties win over all of the above
+        $session_id: this.getSessionId(),
+      }
     }
+    // As in native 4.0: the SDK's own properties, then registered and session properties, then the caller's. A
+    // per-call `disableGeoip` sits under the caller's `$geoip_disable`. A `null`, `undefined` or blank `$session_id`
+    // counts as unset, and `$lib` and `$lib_version` fill last, as a pair. The SDK session is read, which records
+    // session activity and can rotate the session, unless the caller's properties carry a `$session_id`; a
+    // registered `$session_id` still wins for the event.
+    const { $lib, $lib_version, ...sdkProperties } = this.getCommonEventProperties()
+    const callerSessionId = userProperties.$session_id
+    const sessionId = isFilledString(callerSessionId) && callerSessionId.trim() ? undefined : this.getSessionId()
+    const enriched: PostHogEventProperties = {
+      ...sdkProperties,
+      ...this.props,
+      ...this.sessionProps,
+      ...(options?.disableGeoip != null && { $geoip_disable: options.disableGeoip }),
+      ...userProperties,
+    }
+    if (!isFilledString(enriched.$session_id) || !enriched.$session_id.trim()) {
+      enriched.$session_id = sessionId ?? this.getSessionId()
+    }
+    fillLibraryIdentity(enriched, $lib, $lib_version)
+    return enriched
+  }
+
+  /**
+   * Whether events use the posthog-js-lite / React Native 4.x property order: the SDK's own properties, such as
+   * `$lib`, `$os` and `$feature/<key>`, replace registered ones, the SDK's `$session_id` replaces a registered or
+   * caller one, and the client-level `disableGeoip` setting replaces a registered or caller `$geoip_disable`.
+   * {@link PostHogCore} keeps it for posthog-js-lite and `@posthog/electron`.
+   */
+  protected usesLegacyEventPropertyOrder(): boolean {
+    return false
   }
 
   /**
@@ -386,9 +435,20 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return stampedOptions
   }
 
-  // The capture options' `options` go on the message, which capture v1 sends as the event's options.
+  // The capture options' `options` go on the message, which capture v1 sends as the event's options. Outside the
+  // legacy property order, an event's `$geoip_disable`, then a per-call `disableGeoip`, win over the client-level
+  // setting. enrichProperties already layered the per-call value under the caller's and over the registered one.
   protected prepareMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const eventGeoipDisable = message?.properties?.['$geoip_disable']
+    const geoipDisable = this.usesLegacyEventPropertyOrder()
+      ? undefined
+      : eventGeoipDisable != null
+        ? eventGeoipDisable
+        : options?.disableGeoip
     const prepared = super.prepareMessage(message, options)
+    if (geoipDisable != null) {
+      ;(prepared.properties as PostHogEventProperties)['$geoip_disable'] = geoipDisable
+    }
     const eventOptions = eventOptionsOf(options)
     if (eventOptions) {
       prepared.options = { ...eventOptions }
@@ -399,8 +459,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   // A registered `$process_person_profile` is left off identity events: PostHog drops `$identify`, `$create_alias`
   // and `$groupidentify` when person processing is off, so a registered `false` would break identify, alias and
   // group. `before_send` can still set it.
-  private enrichIdentityProperties(properties: PostHogEventProperties): PostHogEventProperties {
-    const enriched = this.enrichProperties(properties)
+  private enrichIdentityProperties(
+    properties: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): PostHogEventProperties {
+    const enriched = this.enrichProperties(properties, options)
     if (!this.usesLegacyEventPersonState()) {
       delete enriched['$process_person_profile']
     }
@@ -408,12 +471,19 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
   }
 
   // enrichProperties already merged the common properties under the caller's, so only fill in
-  // the ones that are missing instead of overriding the caller.
+  // the ones that are missing instead of overriding the caller. Outside the legacy property order,
+  // `$lib` and `$lib_version` fill as a pair.
   protected mergeCommonEventProperties(properties: PostHogEventProperties): PostHogEventProperties {
-    return {
-      ...this.getCommonEventProperties(),
-      ...properties,
+    if (this.usesLegacyEventPropertyOrder()) {
+      return {
+        ...this.getCommonEventProperties(),
+        ...properties,
+      }
     }
+    const { $lib, $lib_version, ...sdkProperties } = this.getCommonEventProperties()
+    const merged: PostHogEventProperties = { ...sdkProperties, ...properties }
+    fillLibraryIdentity(merged, $lib, $lib_version)
+    return merged
   }
 
   /**
@@ -542,11 +612,14 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       // if no $set is provided we assume all properties are $set
       const userProps = properties?.$set || properties
 
-      const allProperties = this.enrichIdentityProperties({
-        $anon_distinct_id: this.getAnonymousId(),
-        ...maybeAdd('$set', userProps),
-        ...maybeAdd('$set_once', userPropsOnce),
-      })
+      const allProperties = this.enrichIdentityProperties(
+        {
+          $anon_distinct_id: this.getAnonymousId(),
+          ...maybeAdd('$set', userProps),
+          ...maybeAdd('$set_once', userPropsOnce),
+        },
+        options
+      )
 
       // Safely cast userProps and userPropsOnce to object types for hash and setPersonProperties
       const userPropsObj = isObject(userProps) ? (userProps as { [key: string]: JsonType }) : undefined
@@ -617,7 +690,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
         this.groups(properties.$groups as PostHogGroupProperties)
       }
 
-      const allProperties = this.enrichProperties(properties)
+      const allProperties = this.enrichProperties(properties, options)
       // A registered `$process_person_profile` doesn't apply to identity events or person updates.
       if (
         !this.usesLegacyEventPersonState() &&
@@ -639,7 +712,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const distinctId = this.getDistinctId()
-      const allProperties = this.enrichIdentityProperties({})
+      const allProperties = this.enrichIdentityProperties({}, options)
 
       super.aliasStateless(alias, distinctId, allProperties, options)
     })
@@ -654,7 +727,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     this.wrap(() => {
       const distinctId = this.getDistinctId()
       const autocaptureProperties: PostHogEventProperties = {
-        ...this.enrichProperties(properties),
+        ...this.enrichProperties(properties, options),
         $event_type: eventType,
         $elements: elements,
       }
@@ -732,7 +805,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       }
 
       const distinctId = this.getDistinctId()
-      const eventProperties = this.enrichIdentityProperties({})
+      const eventProperties = this.enrichIdentityProperties({}, options)
       super.groupIdentifyStateless(groupType, groupKey, groupProperties, options, distinctId, eventProperties)
     })
   }
@@ -2045,6 +2118,10 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 /** The PostHog client core, including the deprecated feature flag getters. */
 export abstract class PostHogCore extends PostHogCoreBase {
   protected usesLegacyEventPersonState(): boolean {
+    return true
+  }
+
+  protected usesLegacyEventPropertyOrder(): boolean {
     return true
   }
 

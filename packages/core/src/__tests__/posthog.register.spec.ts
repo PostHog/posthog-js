@@ -43,4 +43,91 @@ describe('PostHog Core', () => {
       expect(getEnrichedProperties()).toMatchObject({ foo: 'bar2' })
     })
   })
+
+  describe('event property order', () => {
+    const captured = (properties?: Record<string, any>): any => {
+      const onCapture = vi.fn()
+      posthog.on('capture', onCapture)
+      posthog.capture('custom-event', properties)
+      return onCapture.mock.calls[0][0].properties
+    }
+    const useNativePropertyOrder = (): void => {
+      vi.spyOn(posthog as any, 'usesLegacyEventPropertyOrder').mockReturnValue(false)
+    }
+
+    it('lets the SDK properties and session id replace registered and caller ones in the legacy order', () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { disableGeoip: true })
+      posthog.register({ $lib: 'registered-lib', $geoip_disable: false })
+
+      expect(captured({ $session_id: 'caller-session' })).toMatchObject({
+        $lib: 'posthog-core-tests',
+        $lib_version: '2.0.0-alpha',
+        $session_id: posthog.getSessionId(),
+        $geoip_disable: true,
+      })
+    })
+
+    it('lets registered properties win over the SDK properties and caller properties win over both', () => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { disableGeoip: true })
+      useNativePropertyOrder()
+      posthog.register({ $lib: 'registered-lib', $lib_version: '1.0.0', $geoip_disable: false, $session_id: 'a' })
+
+      expect(captured({ $session_id: 'caller-session' })).toMatchObject({
+        $lib: 'registered-lib',
+        $lib_version: '1.0.0',
+        $session_id: 'caller-session',
+        $geoip_disable: false,
+      })
+    })
+
+    it.each([true, false])('lets a per-call disableGeoip: %s win over a registered GeoIP property', (disableGeoip) => {
+      ;[posthog, mocks] = createTestClient('TEST_API_KEY', { disableGeoip: true })
+      useNativePropertyOrder()
+      posthog.register({ $geoip_disable: !disableGeoip })
+      const onCapture = vi.fn()
+      posthog.on('capture', onCapture)
+      posthog.capture('custom-event', {}, { disableGeoip })
+      expect(onCapture.mock.calls[0][0].properties.$geoip_disable).toBe(disableGeoip)
+    })
+
+    it.each([true, false])('lets a caller $geoip_disable: %s win over a per-call disableGeoip', (geoipDisable) => {
+      useNativePropertyOrder()
+      posthog.register({ $geoip_disable: !geoipDisable })
+      const onCapture = vi.fn()
+      posthog.on('capture', onCapture)
+      posthog.capture('custom-event', { $geoip_disable: geoipDisable }, { disableGeoip: !geoipDisable })
+      expect(onCapture.mock.calls[0][0].properties.$geoip_disable).toBe(geoipDisable)
+    })
+
+    it('reads the SDK session unless the caller sets a session id', () => {
+      useNativePropertyOrder()
+      const getSessionId = vi.spyOn(posthog, 'getSessionId')
+      posthog.register({ $session_id: 'registered-session' })
+      captured({ $session_id: 'caller-session' })
+      expect(getSessionId).not.toHaveBeenCalled()
+
+      expect(captured().$session_id).toBe('registered-session')
+      captured({ $session_id: ' ' })
+      expect(getSessionId).toHaveBeenCalledTimes(2)
+    })
+
+    it.each([null, ' '])('treats a %j caller session id as unset', (sessionId) => {
+      useNativePropertyOrder()
+      expect(captured({ $session_id: sessionId }).$session_id).toBe(posthog.getSessionId())
+    })
+
+    it.each([
+      [{ $lib: 'wrapper' }, { $lib: 'wrapper' }],
+      [{ $lib_version: '9.9.9' }, { $lib: 'posthog-core-tests', $lib_version: '2.0.0-alpha' }],
+      [{ $lib: 'posthog-core-tests' }, { $lib: 'posthog-core-tests', $lib_version: '2.0.0-alpha' }],
+      [
+        { $lib: '', $lib_version: '9.9.9' },
+        { $lib: 'posthog-core-tests', $lib_version: '2.0.0-alpha' },
+      ],
+    ])('fills the library name and version as a pair after the caller properties (case %#)', (properties, expected) => {
+      useNativePropertyOrder()
+      const sent = captured(properties)
+      expect({ $lib: sent.$lib, $lib_version: sent.$lib_version }).toEqual({ $lib_version: undefined, ...expected })
+    })
+  })
 })
