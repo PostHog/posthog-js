@@ -1010,12 +1010,11 @@ const distinctId = posthog.getDistinctId()
 Gets the value of a feature flag for the current user.
 
 Returns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag.
-Returns `undefined` before flags load or when loading fails. For backwards compatibility, a
-missing key can resolve to `false` after a non-empty response is stored; use
-`getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.
+Returns `undefined` when no evaluation is available, such as before flags load, after a failed
+first load, or for a key that isn't in the loaded flags.
 
-Globally inactive flags are omitted from remote responses, so they follow this missing-key
-behavior rather than carrying an explicit off evaluation.
+Globally inactive flags are omitted from remote responses, so they read as `undefined` rather
+than `false`.
 
 #### Parameters
 
@@ -1028,7 +1027,7 @@ behavior rather than carrying an explicit off evaluation.
 
 `string` \| `boolean` \| `undefined`
 
-The current feature flag value, or undefined if flags are unavailable
+The current feature flag value, or undefined if no evaluation is available
 
 #### Example
 
@@ -1254,71 +1253,29 @@ current user's events with it. Use `group()` to do both.
 
 ### `PostHog.isFeatureEnabled`
 
-> **isFeatureEnabled**(`key`, `options`): `boolean`
+> **isFeatureEnabled**(`key`, `options?`): `boolean`
 
 Checks if a feature flag is enabled for the current user.
 
-A `false` return value means the SDK resolved the current value as off. If no evaluation is
-available, this method returns `defaultValue` when provided. Without a default, it returns
-`undefined` before flags load; for backwards compatibility, a missing key can resolve to
-`false` after a non-empty response is stored.
+Returns `true` when the flag evaluates on and `false` when it evaluates off. When no evaluation is
+available, such as before flags load, after a failed first load, or for a key that isn't in the loaded
+flags, it returns `defaultValue`, or `false` when you don't pass one. Use `getFeatureFlagResult()` to
+tell an unavailable key from a conclusive off result.
 
-Globally inactive flags are omitted from remote responses, so they follow this missing-key
-behavior rather than carrying an explicit off evaluation.
-
-##### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `string` | The feature flag key |
-| `options` | `PostHogFeatureFlagOptions` & `object` & `object` | Optional per-call settings |
-
-##### Returns
-
-`boolean`
-
-True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
-
-##### Examples
-
-```js
-// check if feature flag is enabled
-const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
-```
-
-```js
-// fall back to false while flags are not loaded
-const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
-```
-
-#### Call Signature
-
-> **isFeatureEnabled**(`key`, `options?`): `boolean` \| `undefined`
-
-Checks if a feature flag is enabled for the current user.
-
-A `false` return value means the SDK resolved the current value as off. If no evaluation is
-available, this method returns `defaultValue` when provided. Without a default, it returns
-`undefined` before flags load; for backwards compatibility, a missing key can resolve to
-`false` after a non-empty response is stored.
-
-Globally inactive flags are omitted from remote responses, so they follow this missing-key
-behavior rather than carrying an explicit off evaluation.
-
-##### Parameters
+#### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
 | `options?` | `PostHogIsFeatureEnabledOptions` | Optional per-call settings |
 
-##### Returns
+#### Returns
 
-`boolean` \| `undefined`
+`boolean`
 
-True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
+True if the flag evaluates on, false if it evaluates off, or `defaultValue` (`false` unless given) if no evaluation is available
 
-##### Examples
+#### Examples
 
 ```js
 // check if feature flag is enabled
@@ -1326,8 +1283,8 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
 ```
 
 ```js
-// fall back to false while flags are not loaded
-const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
+// fall back to true while flags are not loaded
+const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: true })
 ```
 
 ### `useFeatureFlagEnabled`
@@ -3031,7 +2988,7 @@ Per-call settings for `isFeatureEnabled()`.
 
 | Name | Type | Description |
 | ------ | ------ | ------ |
-| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. |
+| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. Defaults to `false`. |
 
 ### `PostHogLogsConfig`
 
