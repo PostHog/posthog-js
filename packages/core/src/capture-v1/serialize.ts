@@ -78,15 +78,18 @@ export function wireProblem(message: PostHogEventProperties): string | undefined
   return undefined
 }
 
+function repairLoneSurrogates(json: string): string {
+  return json.includes('\\ud') || json.includes('\\uD')
+    ? json.replace(LONE_SURROGATE_ESCAPE, (match) => (match.length === 2 ? match : '\\ufffd'))
+    : json
+}
+
 export function serializeV1Event(message: PostHogEventProperties): SerializedV1Event {
   const { properties, ...rest } = buildV1Event(message)
-  const restJson = safeJsonStringify(rest)
-  const rawPropertiesJson = safeJsonStringify(properties)
-  // Property strings are repaired to U+FFFD rather than dropping the event.
-  const propertiesJson =
-    rawPropertiesJson.includes('\\ud') || rawPropertiesJson.includes('\\uD')
-      ? rawPropertiesJson.replace(LONE_SURROGATE_ESCAPE, (match) => (match.length === 2 ? match : '\\ufffd'))
-      : rawPropertiesJson
+  // Property and option strings are repaired to U+FFFD rather than dropping the event. The name and ids
+  // in `rest` are well-formed already, because callers send only events `wireProblem` accepts.
+  const restJson = repairLoneSurrogates(safeJsonStringify(rest))
+  const propertiesJson = repairLoneSurrogates(safeJsonStringify(properties))
   const propertiesBytes = utf8Length(propertiesJson)
   return {
     uuid: rest.uuid,

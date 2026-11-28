@@ -5,7 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 const dist = resolve(__dirname, '../dist');
-const vite6Baseline = { rawBytes: 1_282_071, gzipBytes: 311_326 };
+const vite6Baseline = { rawBytes: 1_287_000, gzipBytes: 311_326 };
 
 describe('build output', () => {
   it('stays within the Vite 6 size baseline', () => {

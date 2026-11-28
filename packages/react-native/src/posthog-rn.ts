@@ -4,7 +4,6 @@ import {
   CaptureLogOptions,
   CaptureLogger,
   JsonType,
-  PostHogCaptureOptions,
   PostHogCoreBase,
   PostHogCoreOptions,
   PostHogEventProperties,
@@ -69,6 +68,7 @@ import { version } from './version'
 import { buildAiEventStorage, buildOptimisticAsyncStorage, getAppProperties } from './native-deps'
 import {
   PostHogAutocaptureOptions,
+  PostHogCaptureOptions,
   PostHogCustomAppProperties,
   PostHogCustomStorage,
   PostHogFeatureFlagOptions,
@@ -1373,6 +1373,16 @@ export class PostHog extends PostHogCoreBase {
     )
   }
 
+  protected prepareMessage(message: any, options?: PostHogCaptureOptions): PostHogEventProperties {
+    const prepared = super.prepareMessage(message, options)
+    const eventOptions: unknown = options?.options
+    if (eventOptions !== undefined) {
+      // A copy, so a caller changing its object later doesn't change the queued event.
+      prepared.options = isObject(eventOptions) ? { ...eventOptions } : (eventOptions as JsonType)
+    }
+    return prepared
+  }
+
   protected enqueue(type: string, message: any, options?: PostHogCaptureOptions, explicitRoute?: string): void {
     if ((options as CaptureAiOptions | undefined)?._captureAi) {
       this._enqueueAi(type, message, options)
@@ -1467,6 +1477,21 @@ export class PostHog extends PostHogCoreBase {
         this.sessionProps.$app_language === undefined && { $app_language: this._appLanguage }),
       $screen_height: height,
       $screen_width: width,
+    }
+  }
+
+  // The event `$timezone` when the app properties have one, none when `customAppProperties` sets it to null or '',
+  // else the JS runtime's. The default app properties have `$timezone` only when expo-localization or
+  // react-native-localize provides it.
+  protected getFlagsRequestTimezone(): string | undefined {
+    if ('$timezone' in this._appProperties) {
+      const timezone = this._appProperties.$timezone
+      return typeof timezone === 'string' && timezone ? timezone : undefined
+    }
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+    } catch {
+      return undefined
     }
   }
 
@@ -2288,13 +2313,10 @@ export class PostHog extends PostHogCoreBase {
   /**
    * Checks if a feature flag is enabled for the current user.
    *
-   * A `false` return value means the SDK resolved the current value as off. If no evaluation is
-   * available, this method returns `defaultValue` when provided. Without a default, it returns
-   * `undefined` before flags load; for backwards compatibility, a missing key can resolve to
-   * `false` after a non-empty response is stored.
-   *
-   * Globally inactive flags are omitted from remote responses, so they follow this missing-key
-   * behavior rather than carrying an explicit off evaluation.
+   * Returns `true` when the flag evaluates on and `false` when it evaluates off. When no evaluation is
+   * available, such as before flags load, after a failed first load, or for a key that isn't in the loaded
+   * flags, it returns `defaultValue`, or `false` when you don't pass one. Use `getFeatureFlagResult()` to
+   * tell an unavailable key from a conclusive off result.
    *
    * {@label Feature flags}
    *
@@ -2306,32 +2328,29 @@ export class PostHog extends PostHogCoreBase {
    *
    * @example
    * ```js
-   * // fall back to false while flags are not loaded
-   * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
+   * // fall back to true while flags are not loaded
+   * const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: true })
    * ```
    *
    * @public
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
+   * @returns True if the flag evaluates on, false if it evaluates off, or `defaultValue` (`false` unless given) if no evaluation is available
    */
-  isFeatureEnabled(key: string, options: PostHogIsFeatureEnabledOptions & { defaultValue: boolean }): boolean
-  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined
-  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean | undefined {
-    return super.isFeatureEnabled(key, options)
+  isFeatureEnabled(key: string, options?: PostHogIsFeatureEnabledOptions): boolean {
+    return super.isFeatureEnabled(key, { ...options, defaultValue: options?.defaultValue ?? false })
   }
 
   /**
    * Gets the value of a feature flag for the current user.
    *
    * Returns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag.
-   * Returns `undefined` before flags load or when loading fails. For backwards compatibility, a
-   * missing key can resolve to `false` after a non-empty response is stored; use
-   * `getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.
+   * Returns `undefined` when no evaluation is available, such as before flags load, after a failed
+   * first load, or for a key that isn't in the loaded flags.
    *
-   * Globally inactive flags are omitted from remote responses, so they follow this missing-key
-   * behavior rather than carrying an explicit off evaluation.
+   * Globally inactive flags are omitted from remote responses, so they read as `undefined` rather
+   * than `false`.
    *
    * {@label Feature flags}
    *
@@ -2345,7 +2364,7 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param key The feature flag key
    * @param options Optional per-call settings
-   * @returns The current feature flag value, or undefined if flags are unavailable
+   * @returns The current feature flag value, or undefined if no evaluation is available
    */
   getFeatureFlag(key: string, options?: PostHogFeatureFlagOptions): boolean | string | undefined {
     return super.getFeatureFlag(key, options)
@@ -2593,9 +2612,15 @@ export class PostHog extends PostHogCoreBase {
    * @param groupType The type of group (e.g. 'company', 'team')
    * @param groupKey The unique identifier for the group
    * @param properties Optional properties to set for the group
+   * @param options Optional capture options for the `$groupidentify` event
    */
-  group(groupType: string, groupKey: string, properties?: PostHogEventProperties): void {
-    super.group(groupType, groupKey, properties)
+  group(
+    groupType: string,
+    groupKey: string,
+    properties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.group(groupType, groupKey, properties, options)
 
     // Automatically cache group properties for feature flag evaluation
     if (properties && Object.keys(properties).length > 0) {
@@ -2615,6 +2640,26 @@ export class PostHog extends PostHogCoreBase {
   }
 
   /**
+   * Sends a `$groupidentify` event that sets properties on a group, without associating the
+   * current user's events with it. Use `group()` to do both.
+   *
+   * @public
+   *
+   * @param groupType The type of group (e.g. 'company', 'team')
+   * @param groupKey The unique identifier for the group
+   * @param groupProperties Optional properties to set for the group
+   * @param options Optional capture options for the `$groupidentify` event
+   */
+  groupIdentify(
+    groupType: string,
+    groupKey: string | number,
+    groupProperties?: PostHogEventProperties,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.groupIdentify(groupType, groupKey, groupProperties, options)
+  }
+
+  /**
    * Assigns an alias to the current user.
    *
    * Sometimes, you want to assign multiple distinct IDs to a single user. This is helpful when your primary distinct ID is inaccessible.
@@ -2631,9 +2676,10 @@ export class PostHog extends PostHogCoreBase {
    * @public
    *
    * @param alias The alias to assign to the current user
+   * @param options Optional capture options for the `$create_alias` event
    */
-  alias(alias: string): void {
-    super.alias(alias)
+  alias(alias: string, options?: PostHogCaptureOptions): void {
+    super.alias(alias, options)
   }
 
   /**
@@ -2775,6 +2821,32 @@ export class PostHog extends PostHogCoreBase {
     if (reloadFeatureFlags) {
       this.reloadFeatureFlags()
     }
+  }
+
+  /**
+   * Captures an event.
+   *
+   * {@label Capture}
+   *
+   * @example
+   * ```js
+   * posthog.capture('signed_up', { plan: 'pro' })
+   * ```
+   *
+   * @example
+   * ```js
+   * // Tell PostHog not to create or update a person profile for this event
+   * posthog.capture('signed_up', { plan: 'pro' }, { options: { process_person_profile: false } })
+   * ```
+   *
+   * @public
+   *
+   * @param event - The name of the event
+   * @param properties - Optional properties to include with the event
+   * @param options - Optional capture options
+   */
+  capture(event: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+    super.capture(event, properties, options)
   }
 
   /**
@@ -3375,15 +3447,18 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param {Error} error The error to capture
    * @param {Object} [additionalProperties] Any additional properties to add to the error event
+   * @param hint Optional details about how the error was caught
+   * @param options Optional capture options for the `$exception` event
    * @returns {void}
    */
   captureException(
     error: Error | unknown,
     additionalProperties: PostHogEventProperties = {},
-    hint?: CoreErrorTracking.EventHint
+    hint?: CoreErrorTracking.EventHint,
+    options?: PostHogCaptureOptions
   ): void {
     try {
-      const result = this.captureExceptionInternal(error, additionalProperties, hint)
+      const result = this.captureExceptionInternal(error, additionalProperties, hint, options)
       if (result?.additionalProperties?.$exception_level === 'fatal') {
         void this._eventsStorage.waitForPersist()
         void this._logsStorage.waitForPersist()
@@ -3554,13 +3629,15 @@ export class PostHog extends PostHogCoreBase {
    * @param userPropertiesToSetOnce - Optional: An object of properties to store about the user.
    *   If a property is previously set, this does not override that value.
    * @param reloadFeatureFlags - Whether to reload feature flags after setting the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
   setPersonProperties(
     userPropertiesToSet?: { [key: string]: JsonType },
     userPropertiesToSetOnce?: { [key: string]: JsonType },
-    reloadFeatureFlags = true
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
   ): void {
-    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags)
+    super.setPersonProperties(userPropertiesToSet, userPropertiesToSetOnce, reloadFeatureFlags, options)
   }
 
   /**
@@ -3573,9 +3650,14 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param propertyNames - The name (or names) of the person properties to remove.
    * @param reloadFeatureFlags - Whether to reload feature flags after removing the properties. Defaults to true.
+   * @param options - Optional capture options for the `$set` event
    */
-  unsetPersonProperties(propertyNames: string | string[], reloadFeatureFlags = true): void {
-    super.unsetPersonProperties(propertyNames, reloadFeatureFlags)
+  unsetPersonProperties(
+    propertyNames: string | string[],
+    reloadFeatureFlags = true,
+    options?: PostHogCaptureOptions
+  ): void {
+    super.unsetPersonProperties(propertyNames, reloadFeatureFlags, options)
   }
 
   public async getSurveys(): Promise<SurveyResponse['surveys']> {
@@ -4538,7 +4620,28 @@ export class PostHog extends PostHogCoreBase {
           // Native runs its own debug-property builder on the handed-off event, so the JS
           // snapshot is stripped to keep one consistent map on the event. The JS queue copy,
           // used when native declines, keeps it.
-          const nativePayload = { ...processed, properties: withoutDebugProperties(processed.properties) }
+          const nativeProperties = withoutDebugProperties(processed.properties)
+          // Native reads a missing `$process_person_profile` or `$is_identified` by its own person
+          // state, which knows nothing of JS identity, so both are sent explicitly. The person
+          // processing is the event's `process_person_profile` option, which wins over the property
+          // as on capture v1, else the property, else `true`, since PostHog processes the person
+          // when both are missing.
+          const eventOptions = isObject(processed.options) ? (processed.options as PostHogEventProperties) : {}
+          const properties =
+            isObject(nativeProperties) && !Array.isArray(nativeProperties)
+              ? (nativeProperties as PostHogEventProperties)
+              : undefined
+          const nativePayload = {
+            ...processed,
+            properties: properties
+              ? {
+                  ...properties,
+                  $process_person_profile:
+                    eventOptions.process_person_profile ?? properties['$process_person_profile'] ?? true,
+                  $is_identified: properties['$is_identified'] ?? this._isIdentified(),
+                }
+              : nativeProperties,
+          }
           observation.nativeCapture = observation.prepareNativeCapture(
             withoutNullProperties(nativePayload) ?? nativePayload
           )
@@ -4726,7 +4829,14 @@ export class PostHog extends PostHogCoreBase {
       )
     }
 
-    const initialUrl = (await Linking.getInitialURL()) ?? undefined
+    // getInitialURL() rejects on Android when reading the launch intent throws; that must not stop
+    // Application Opened or the AppState listener below from being set up.
+    let initialUrl: string | undefined
+    try {
+      initialUrl = (await Linking.getInitialURL()) ?? undefined
+    } catch (e) {
+      this._logger.warn('Could not read the initial URL for Application Opened:', e)
+    }
 
     this.capture('Application Opened', {
       ...properties,

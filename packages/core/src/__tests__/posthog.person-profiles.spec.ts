@@ -550,6 +550,17 @@ describe('PostHog Core - Person Profiles', () => {
       expect(parseBody(identifyCall).batch[0].properties.$process_person_profile).toBe(false)
     })
 
+    it('sends a $set again after an $identify that carried a registered $process_person_profile false', async () => {
+      const [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, personProfiles: 'identified_only' })
+      posthog.register({ $process_person_profile: false })
+      posthog.identify('user-123', { plan: 'pro' })
+      posthog.setPersonProperties({ plan: 'pro' }, undefined, false)
+      await posthog.flush()
+
+      const events = mocks.fetch.mock.calls.flatMap((call) => parseBody(call).batch ?? []).map((e: any) => e.event)
+      expect(events).toEqual(['$identify', '$set'])
+    })
+
     it('leaves person state off $autocapture events', async () => {
       const [posthog, mocks] = createTestClient('TEST_API_KEY', { flushAt: 1, personProfiles: 'identified_only' })
       posthog.autocapture('click', [])

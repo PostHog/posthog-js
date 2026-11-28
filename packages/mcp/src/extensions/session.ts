@@ -20,7 +20,7 @@ import type { RequestClient } from './client-conversation'
 import { resolveClientIdentity } from './client-identity'
 import { getServerTrackingData, setServerTrackingData } from './internal'
 import { getRequestHeaders } from './request-headers'
-import { decodeSessionId, readMcpSessionHeader } from './session-token'
+import { decodeSessionId, isHandshakeBound, readMcpSessionHeader } from './session-token'
 import type { SessionTokenPayload } from './session-token'
 
 /**
@@ -110,6 +110,7 @@ export function deriveSessionIdFromConversation(conversationId: string): string 
 export interface ResolvedSession {
   sessionId: string
   source: MCPAnalyticsSessionSource
+  fromHost?: true
 }
 
 function readHostSessionId(
@@ -137,8 +138,8 @@ function readHostSessionId(
  *   1. the client named the conversation in `_meta`          — a tool call
  *   2. the agent carried a `conversation_id` tool argument   — 2026-07-28
  *   3. the request carried a session id                      — 2025-11-25
- *   4. nothing was carried, so reuse this instance's own id  — stdio;
- *      a handle-free client's HTTP call gets a fresh id of its own instead
+ *   4. nothing was carried: a one-client connection (stdio) reuses this
+ *      instance's own id; a stateless HTTP request gets a fresh id of its own
  *
  * A client that names its conversation (1) sends that id on every call, while a
  * handle (2) groups calls only while the agent copies it into each one, so the
@@ -164,7 +165,7 @@ export function resolveSession(
   const hostSessionId = request ? readHostSessionId(data, request, extra) : undefined
   if (hostSessionId) {
     applyTokenClientIdentity(data, extra)
-    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport' }
+    return { sessionId: deriveSessionIdFromConversation(hostSessionId), source: 'transport', fromHost: true }
   }
 
   const clientConversation = client?.conversation
@@ -189,7 +190,9 @@ export function resolveSession(
   const carriedSessionId = readSessionIdFromRequest(data, extra)
   // 4 on a shared HTTP instance: its own id would group every client it serves.
   // A handle-free client was minted no handle to group it, so the call stands alone.
-  if (!carriedSessionId && client?.row?.handleFree && getRequestHeaders(extra)) {
+  // So does any other HTTP request that carried no session: the spec gives it a
+  // fresh id of its own.
+  if (!carriedSessionId && getRequestHeaders(extra)) {
     return { sessionId: newSessionId(), source: 'generated' }
   }
 
@@ -307,16 +310,15 @@ function getSessionIdFromMemory(data: MCPAnalyticsData): string {
 export function getSessionInfo(
   server: MCPServerLike,
   data: MCPAnalyticsData | undefined,
-  sessionId?: string
+  sessionId?: string,
+  extra?: CompatibleRequestHandlerExtra
 ): SessionInfo {
+  const handshakeBound = isHandshakeBound(extra)
   let clientInfo: ServerClientInfoLike | undefined
-  if (data?.sessionInfo.clientName) {
-    clientInfo = {
-      name: data.sessionInfo.clientName,
-      version: data.sessionInfo.clientVersion,
-    }
-  } else {
-    clientInfo = server.getClientVersion()
+  if (handshakeBound) {
+    clientInfo = data?.sessionInfo.clientName
+      ? { name: data.sessionInfo.clientName, version: data.sessionInfo.clientVersion }
+      : server.getClientVersion()
   }
   const actorInfo = data?.identifiedSessions.get(sessionId ?? data.sessionId)
 
@@ -331,13 +333,15 @@ export function getSessionInfo(
     clientVersion: clientInfo?.version,
     // No SDK getter for this (unlike getClientVersion) — the MCP SDK never
     // retains the negotiated version, so it lives only where we stored it.
-    protocolVersion: data?.sessionInfo.protocolVersion,
+    protocolVersion: handshakeBound ? data?.sessionInfo.protocolVersion : undefined,
     identifyActorGivenId: actorInfo?.distinctId,
     identifyActorData: actorInfo?.properties || {},
     identifyActorGroups: actorInfo?.groups,
   }
 
-  if (!data) {
+  // An unbound request's snapshot leaves out the instance's client, so writing it
+  // back would erase that client for the requests the handshake does bind.
+  if (!data || !handshakeBound) {
     return sessionInfo
   }
 

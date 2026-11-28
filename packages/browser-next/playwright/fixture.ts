@@ -1,5 +1,5 @@
-import { acquisitionHarness } from './acquisition-fixture'
-window.acquisitionHarness = acquisitionHarness
+import { rootHarness } from './root-fixture'
+window.rootHarness = rootHarness
 import { requireInstalledExtension } from '../tests/helpers'
 import { autocaptureHarness } from './autocapture-fixture'
 window.autocaptureHarness = autocaptureHarness
@@ -9,7 +9,6 @@ window.surveysHarness = surveysHarness
 import { logs } from '../src/products/logs/logs'
 import type { IPostHog } from '../src/core/types'
 import { flags } from '../src/products/flags/flags'
-import { analytics } from '../src/products/analytics/analytics'
 import { createPostHog, type CaptureSummary, type SessionContext } from '../src/composition/npm/core'
 
 interface ConsentHarness {
@@ -57,6 +56,15 @@ declare global {
             pagehideDuringShutdown(): Promise<{ beacon: string; fetches: number }>
         }
         consentHarness: ConsentHarness
+        optOutByDefaultHarness: {
+            optIn(): Promise<void>
+            hasOptedOut(): Promise<boolean>
+            capture(event: string): Promise<void>
+            reset(): Promise<void>
+            flush(): Promise<void>
+            clearedChoiceEvents(): number
+            delivered(): string[]
+        }
     }
 }
 
@@ -99,10 +107,8 @@ const client = createPostHog({
             headers: { 'Content-Type': 'application/json' },
         })
     },
-    extensions: [
-        analytics({ flushAt: 100, flushInterval: 0 }),
-        flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
-    ],
+    analytics: { flushAt: 100, flushInterval: 0 },
+    extensions: [flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 })],
     remoteConfig: {
         supportedCompression: ['gzip-js'],
         toolbarParams: {},
@@ -132,16 +138,16 @@ window.consentHarness = {
         return (await client).anonymousId
     },
     async capture(event) {
-        requireInstalledExtension((await client).analytics).capture(event)
+        ;(await client).capture(event)
     },
     async captureImmediate(event) {
-        return requireInstalledExtension((await client).analytics).captureImmediate(event)
+        return (await client).captureImmediate(event)
     },
     async compressionDelivery(value) {
         const posthog = await client
         lastDelivery = undefined
         const started = performance.now()
-        await requireInstalledExtension(posthog.analytics).capture('compression_test', { value })
+        posthog.capture('compression_test', { value })
         await posthog.flush()
         const delivery = currentDelivery()
         if (!delivery) {
@@ -174,13 +180,11 @@ window.consentHarness = {
             capturePageview: false,
             storage: false,
             navigator: false,
-            extensions: [
-                analytics({ flushAt: 100, flushInterval: 0 }),
-                flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 }),
-            ],
+            analytics: { flushAt: 100, flushInterval: 0 },
+            extensions: [flags({ featureFlagEvaluation: false, refreshIntervalMs: 0 })],
         })
         for (const event of events) {
-            await requireInstalledExtension(posthog.analytics).capture(event)
+            posthog.capture(event)
         }
     },
     requests() {
@@ -201,14 +205,14 @@ window.consentHarness = {
         return { config, canCapture }
     },
     async registerForSession(properties) {
-        requireInstalledExtension((await client).analytics).registerForSession(properties)
+        ;(await client).registerForSession(properties)
     },
     async unregisterForSession(property) {
-        requireInstalledExtension((await client).analytics).unregisterForSession(property)
+        ;(await client).unregisterForSession(property)
     },
     delivered: () => lastDelivery?.body,
     async reset() {
-        requireInstalledExtension((await client).analytics).reset()
+        ;(await client).reset()
     },
     async session() {
         return (await client).session
@@ -216,6 +220,62 @@ window.consentHarness = {
     sessionChanges() {
         return sessionChanges.slice()
     },
+}
+
+const optOutByDefaultToken = 'ph_browser_next_playwright_opt_out_by_default'
+const optOutByDefaultDelivered: string[] = []
+let clearedChoiceEvents = 0
+// oxlint-disable-next-line posthog-js/no-add-event-listener
+window.addEventListener('storage', (event) => {
+    if (event.key === `__ph_opt_in_out_${optOutByDefaultToken}` && event.newValue === null) {
+        clearedChoiceEvents++
+    }
+})
+// Created on first use so other specs keep a single client per page.
+let optOutByDefaultClient: Promise<IPostHog> | undefined
+const optOutByDefault = (): Promise<IPostHog> =>
+    (optOutByDefaultClient ??= createPostHog({
+        projectToken: optOutByDefaultToken,
+        capturePageview: false,
+        navigator: false,
+        optOutByDefault: true,
+        fetch: async (_input, init = {}) => {
+            const envelope = JSON.parse(String(init.body)) as { batch: Array<{ uuid: string; event: string }> }
+            optOutByDefaultDelivered.push(...envelope.batch.map(({ event }) => event))
+            const results = Object.fromEntries(envelope.batch.map(({ uuid }) => [uuid, { result: 'ok' }]))
+            return new Response(JSON.stringify({ results }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            })
+        },
+        analytics: { flushAt: 100, flushInterval: 0 },
+        remoteConfig: {
+            supportedCompression: [],
+            toolbarParams: {},
+            toolbarVersion: 'toolbar',
+            isAuthenticated: false,
+            siteApps: [],
+        },
+    }))
+
+window.optOutByDefaultHarness = {
+    async optIn() {
+        ;(await optOutByDefault()).optIn()
+    },
+    async hasOptedOut() {
+        return (await optOutByDefault()).hasOptedOut()
+    },
+    async capture(event) {
+        ;(await optOutByDefault()).capture(event)
+    },
+    async reset() {
+        ;(await optOutByDefault()).reset()
+    },
+    async flush() {
+        await (await optOutByDefault()).flush()
+    },
+    clearedChoiceEvents: () => clearedChoiceEvents,
+    delivered: () => optOutByDefaultDelivered.slice(),
 }
 
 /* oxlint-disable no-console -- Exercise native console instrumentation. */

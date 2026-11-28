@@ -967,6 +967,27 @@ describe('Lazy SessionRecording', () => {
                 }
             )
 
+            it.each([undefined, false, true, 'true', 1])(
+                'returns fetch responses early only when the private init flag is true (%s)',
+                (flag) => {
+                    const getRecordNetworkPlugin = vi.fn((options) => ({
+                        name: 'network',
+                        observer: undefined,
+                        options,
+                    }))
+                    assignableWindow.__PosthogExtensions__!.rrwebPlugins = {
+                        getRecordConsolePlugin: undefined,
+                        getRecordNetworkPlugin,
+                    }
+                    Reflect.set(posthog.config, '__preview_replay_early_fetch_response', flag)
+                    posthog.config.session_recording.recordBody = true
+                    const recorder = new LazyLoadedSessionRecording(posthog, true)
+                    recorder['_forceAllowLocalhostNetworkCapture'] = true
+                    recorder['_gatherRRWebPlugins']()
+                    expect(getRecordNetworkPlugin.mock.calls[0][0].returnFetchResponseEarly).toBe(flag === true)
+                }
+            )
+
             it('filters ingestion paths when rewriteRequestPath is configured after the plugin starts', () => {
                 const getRecordNetworkPlugin = vi.fn((options: NetworkRecordOptions) => ({
                     name: 'network',

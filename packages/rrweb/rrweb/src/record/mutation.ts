@@ -257,12 +257,33 @@ export default class MutationBuffer {
   }
 
   public processMutations = (mutations: mutationRecord[]): void => {
+    this.iframeManager.releaseBlockedRelayingIframes(mutations);
+    if (this.iframeManager.isBlockedDocument(this.doc)) return;
     mutations.forEach(this.processMutation); // adds mutations to the buffer
     this.emit(); // clears buffer if not locked/frozen
   };
 
+  private clearBufferedMutations(): void {
+    this.texts.clear();
+    this.attributes.clear();
+    this.generatedAttributes = new WeakMap<Node, Set<string>>();
+    this.removes = [];
+    this.addedSet = new Set<Node>();
+    this.movedSet = new Set<Node>();
+    this.droppedSet = new Set<Node>();
+    this.removesSubTreeCache = new Set<Node>();
+    this.movedMap = {};
+  }
+
   public emit = (): void => {
     if (this.frozen || this.locked) {
+      return;
+    }
+    // Changes buffered while frozen or locked are drained here without passing
+    // processMutations, and the iframe may have been blocked in the meantime.
+    if (this.iframeManager.isBlockedDocument(this.doc)) {
+      this.clearBufferedMutations();
+      this.selectedAttributeChanges.clear();
       return;
     }
 
@@ -632,15 +653,7 @@ export default class MutationBuffer {
 
     // Reset before the empty-payload return: these collections strongly
     // reference DOM nodes, and payload holds its own references.
-    this.texts.clear();
-    this.attributes.clear();
-    this.generatedAttributes = new WeakMap<Node, Set<string>>();
-    this.removes = [];
-    this.addedSet = new Set<Node>();
-    this.movedSet = new Set<Node>();
-    this.droppedSet = new Set<Node>();
-    this.removesSubTreeCache = new Set<Node>();
-    this.movedMap = {};
+    this.clearBufferedMutations();
 
     const selectedAttributeChanges = this.selectedAttributeChanges;
     this.selectedAttributeChanges = new Set();

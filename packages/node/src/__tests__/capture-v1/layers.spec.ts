@@ -491,7 +491,7 @@ describe('layered event values', () => {
         })
       })
 
-      describe('$release_id on $exception', () => {
+      describe('$release_id', () => {
         beforeEach(() => {
           vi.stubEnv('POSTHOG_RELEASE_ID', 'injected-release')
         })
@@ -501,14 +501,20 @@ describe('layered event values', () => {
         })
 
         it('fills before beforeSend', async () => {
-          const { event, hookSaw } = await sendWithPropertyLayers({}, { event: '$exception' })
+          const { event, hookSaw } = await sendWithPropertyLayers({})
 
           expect(event.properties.$release_id).toBe('injected-release')
           expect(hookSaw.properties.$release_id).toBe('injected-release')
         })
 
+        it('fills on an $exception', async () => {
+          const { event } = await sendWithPropertyLayers({}, { event: '$exception' })
+
+          expect(event.properties.$release_id).toBe('injected-release')
+        })
+
         it.each(SOURCES)('loses to the %s layer', async (source) => {
-          const { event } = await sendWithPropertyLayers({ [source]: { $release_id: 'mine' } }, { event: '$exception' })
+          const { event } = await sendWithPropertyLayers({ [source]: { $release_id: 'mine' } })
 
           expect(event.properties.$release_id).toBe('mine')
         })
@@ -519,6 +525,81 @@ describe('layered event values', () => {
           )
 
           expect(event.properties.$release_id).toBe('mine')
+        })
+
+        it('is trimmed', async () => {
+          vi.stubEnv('POSTHOG_RELEASE_ID', '  spaced-release  ')
+
+          const { event } = await sendWithPropertyLayers({})
+
+          expect(event.properties.$release_id).toBe('spaced-release')
+        })
+
+        it.each([
+          ['empty', ''],
+          ['whitespace-only', '   '],
+        ])('is omitted when the variable is %s', async (_name, value) => {
+          vi.stubEnv('POSTHOG_RELEASE_ID', value)
+
+          const { event } = await sendWithPropertyLayers({})
+
+          expect(event.properties).not.toHaveProperty('$release_id')
+        })
+
+        it('is read once, when the client is constructed', async () => {
+          const client = harness.makeClient()
+          vi.stubEnv('POSTHOG_RELEASE_ID', 'later-release')
+          client.capture({ distinctId: 'u', event: 'e' })
+          await client.flush()
+
+          expect(wireEvents()[0].properties.$release_id).toBe('injected-release')
+        })
+
+        it('a beforeSend hook can remove it', async () => {
+          const event = await sendOne((client) => client.capture({ distinctId: 'u', event: 'e' }), {
+            beforeSend: (hookEvent) => {
+              delete hookEvent!.properties!.$release_id
+              return hookEvent
+            },
+          })
+
+          expect(event.properties).not.toHaveProperty('$release_id')
+        })
+
+        it.each([
+          ['identify', (client: PostHog) => client.identify({ distinctId: 'u', properties: { plan: 'pro' } })],
+          ['alias', (client: PostHog) => client.alias({ distinctId: 'u', alias: 'u2' })],
+          [
+            'groupIdentify',
+            (client: PostHog) =>
+              client.groupIdentify({ groupType: 'company', groupKey: 'acme', properties: { name: 'Acme' } }),
+          ],
+        ])('lands on a %s event', async (_name, send) => {
+          const event = await sendOne(send)
+
+          expect(event.properties.$release_id).toBe('injected-release')
+        })
+
+        it('stays out of $set and $set_once', async () => {
+          const event = await sendOne((client) =>
+            client.capture({
+              distinctId: 'u',
+              event: 'e',
+              properties: { $set: { plan: 'pro' }, $set_once: { first: true } },
+            })
+          )
+
+          expect(event.properties.$release_id).toBe('injected-release')
+          expect(event.properties.$set).not.toHaveProperty('$release_id')
+          expect(event.properties.$set_once).not.toHaveProperty('$release_id')
+        })
+
+        it('stays out of $group_set', async () => {
+          const event = await sendOne((client) =>
+            client.groupIdentify({ groupType: 'company', groupKey: 'acme', properties: { name: 'Acme' } })
+          )
+
+          expect(event.properties.$group_set).not.toHaveProperty('$release_id')
         })
       })
     })

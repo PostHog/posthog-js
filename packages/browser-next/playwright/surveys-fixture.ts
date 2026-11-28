@@ -1,8 +1,5 @@
-import { requireInstalledExtension } from '../tests/helpers'
 import { createPostHog } from '../src/composition/npm'
 import { surveys } from '../src/products/surveys/surveys'
-import { analytics } from '../src/products/analytics/analytics'
-import { createAnalyticsExtension } from '../src/products/analytics/analytics-buffer'
 import type { IPostHog } from '../src/core/types'
 import type { Survey } from '../src/products/surveys/surveys-options'
 
@@ -30,10 +27,10 @@ let definitions: Survey[] = []
 declare global {
     interface Window {
         surveysHarness: {
-            initializeTeardown(projectToken: string, loading?: boolean): Promise<void>
+            initializeTeardown(projectToken: string): Promise<void>
             pagehide(): void
             initialize(
-                mode: 'static' | 'dynamic' | 'acquired',
+                mode: 'static' | 'dynamic',
                 enabled: boolean,
                 storage: boolean,
                 automatic: boolean,
@@ -75,15 +72,11 @@ export const surveysHarness: Window['surveysHarness'] = {
             ...(storage ? {} : { storage: false as const }),
             navigator: false,
             capturePageview: false,
-            analytics: mode === 'acquired' ? { flushInterval: 0 } : false,
+            analytics: { flushAt: 100, flushInterval: 0 },
             flags: false,
             logs: false,
-            ...(mode === 'acquired' ? { autocapture: false as const } : {}),
             surveys: mode === 'static' ? false : options,
-            extensions:
-                mode === 'acquired'
-                    ? []
-                    : [createAnalyticsExtension(), ...(mode === 'static' ? [surveys(options)] : [])],
+            extensions: mode === 'static' ? [surveys(options)] : [],
             remoteConfig: {
                 toolbarParams: {},
                 toolbarVersion: 'toolbar',
@@ -100,11 +93,9 @@ export const surveysHarness: Window['surveysHarness'] = {
                 return new Response('{}')
             },
         })
-        requireInstalledExtension(client.analytics).onEvent((event) =>
-            events.push({ event: event.event, properties: { ...event.properties } })
-        )
+        client.onEvent((event) => events.push({ event: event.event, properties: { ...event.properties } }))
     },
-    async initializeTeardown(projectToken, loading = false) {
+    async initializeTeardown(projectToken) {
         await client?.dispose()
         events = []
         const definition: Survey = {
@@ -117,7 +108,7 @@ export const surveysHarness: Window['surveysHarness'] = {
             storage: false,
             navigator: false,
             capturePageview: false,
-            analytics: false,
+            analytics: { flushInterval: 0 },
             flags: false,
             logs: false,
             remoteConfig: {
@@ -128,27 +119,20 @@ export const surveysHarness: Window['surveysHarness'] = {
                 siteApps: [],
                 surveys: false,
             },
-            extensions: [
-                loading
-                    ? createAnalyticsExtension({ flushInterval: 0 }, () => new Promise(() => {}))
-                    : analytics({ flushInterval: 0 }),
-                surveys({ automaticDisplay: false }),
-            ],
+            extensions: [surveys({ automaticDisplay: false })],
             fetch: async (url, options) =>
                 String(url).includes('/api/surveys/')
                     ? new Response(JSON.stringify({ surveys: [definition] }), { status: 200 })
                     : globalThis.fetch(url, options),
         })
-        requireInstalledExtension(client.analytics).onEvent((event) =>
-            events.push({ event: event.event, properties: { ...event.properties } })
-        )
+        client.onEvent((event) => events.push({ event: event.event, properties: { ...event.properties } }))
         client.surveys?.displaySurvey(survey.id)
     },
     pagehide() {
         window.dispatchEvent(new Event('pagehide'))
     },
     display: () => client?.surveys?.displaySurvey(survey.id),
-    capture: () => client && requireInstalledExtension(client.analytics).capture('trigger-survey'),
+    capture: () => client?.capture('trigger-survey'),
     optOut: () => client?.optOut(),
     optIn: () => client?.optIn(),
     dispose: async () => {

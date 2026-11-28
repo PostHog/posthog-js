@@ -1,6 +1,6 @@
 import type { KeyValueStore } from '@posthog/browser-common'
 
-const REGISTERED_PROPERTIES = 'superProperties'
+export const REGISTERED_PROPERTIES = 'superProperties'
 const isPropertyMap = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value)
 

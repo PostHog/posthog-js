@@ -1,3 +1,29 @@
+import type { JsonType, PostHogCaptureOptionsWithEventOptions } from '@posthog/core'
+
+/**
+ * Settings that tell PostHog how to process one event, sent with the event apart from its
+ * properties. Keys and values are sent as given, including keys this type doesn't list.
+ * An option wins over its legacy `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at`
+ * or `$product_tour_id` property.
+ */
+export type EventOptions = {
+  /** Whether PostHog creates or updates a person profile for this event. */
+  process_person_profile?: boolean
+  /** Whether PostHog processes this event in cookieless mode. */
+  cookieless_mode?: boolean
+  /** Whether PostHog skips correcting this event's timestamp for client clock skew. */
+  disable_skew_correction?: boolean
+  /** The product tour this event belongs to. */
+  product_tour_id?: string
+  [key: string]: JsonType | undefined
+}
+
+/** Options for a call that sends an event, such as `capture()`, `identify()` or `alias()`. */
+export type PostHogCaptureOptions = PostHogCaptureOptionsWithEventOptions & {
+  /** Settings that tell PostHog how to process the event. `before_send` can change them through the event's `options`. */
+  options?: EventOptions
+}
+
 export type PostHogAutocaptureNavigationTrackerOptions = {
   routeToName?: (name: string, params: any) => string
   routeToProperties?: (name: string, params: any) => Record<string, any>
@@ -14,7 +40,7 @@ export type PostHogFeatureFlagOptions = {
 
 /** Per-call settings for `isFeatureEnabled()`. */
 export type PostHogIsFeatureEnabledOptions = PostHogFeatureFlagOptions & {
-  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. */
+  /** Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. Defaults to `false`. */
   defaultValue?: boolean
 }
 

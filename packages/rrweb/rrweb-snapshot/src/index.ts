@@ -15,6 +15,7 @@ import snapshot, {
   onceLinkStylesheetUpToDate,
   isStylesheetLink,
   genId,
+  _isBlockedElement,
 } from './snapshot';
 import rebuild, {
   buildNodeWithSN,
@@ -52,4 +53,5 @@ export {
   onceLinkStylesheetUpToDate,
   isStylesheetLink,
   genId,
+  _isBlockedElement,
 };

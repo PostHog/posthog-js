@@ -119,6 +119,8 @@ export class StylesheetManager {
   private maskAttributeFn: MaskAttributeFn | undefined;
   private blockClass: blockClass;
   private blockSelector: string | null;
+  private isBlockedDocument: (doc: Document) => boolean = () => false;
+  private getNode: (id: number) => Node | null = () => null;
   public styleMirror: StyleSheetMirror = new StyleSheetMirror();
 
   constructor(options: {
@@ -137,13 +139,25 @@ export class StylesheetManager {
     this.blockSelector = options.blockSelector ?? null;
   }
 
+  // Set by the recorder once the iframe manager exists, so stylesheet events
+  // from an iframe that became blocked are dropped like its other events.
+  public setBlockedDocumentCheck(
+    isBlockedDocument: (doc: Document) => boolean,
+    getNode: (id: number) => Node | null,
+  ): void {
+    this.isBlockedDocument = isBlockedDocument;
+    this.getNode = getNode;
+  }
+
   // Every path here emits a link's CSS after it was serialized, and the link
   // or an ancestor can be blocked in between.
   private isLinkBlocked(linkEl: HTMLLinkElement): boolean {
-    return isBlockedIncludingShadowHosts(
-      linkEl,
-      this.blockClass,
-      this.blockSelector,
+    return (
+      isBlockedIncludingShadowHosts(
+        linkEl,
+        this.blockClass,
+        this.blockSelector,
+      ) || this.isBlockedDocument(linkEl.ownerDocument)
     );
   }
 
@@ -579,6 +593,13 @@ export class StylesheetManager {
     hostId: number,
   ): void {
     if (sheets.length === 0) return;
+    const host = this.getNode(hostId);
+    const hostDoc = host
+      ? host.nodeType === host.DOCUMENT_NODE
+        ? (host as Document)
+        : host.ownerDocument
+      : null;
+    if (hostDoc && this.isBlockedDocument(hostDoc)) return;
     const adoptedStyleSheetData: adoptedStyleSheetParam = {
       id: hostId,
       styleIds: [] as number[],

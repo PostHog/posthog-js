@@ -375,17 +375,30 @@ export function MyApp() {
 
 > **capture**(`event`, `properties?`, `options?`): `void`
 
+Captures an event.
+
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `event` | `string` |
-| `properties?` | `PostHogEventProperties` |
-| `options?` | `PostHogCaptureOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `event` | `string` | The name of the event |
+| `properties?` | `PostHogEventProperties` | Optional properties to include with the event |
+| `options?` | `PostHogCaptureOptions` | Optional capture options |
 
 #### Returns
 
 `void`
+
+#### Examples
+
+```js
+posthog.capture('signed_up', { plan: 'pro' })
+```
+
+```js
+// Tell PostHog not to create or update a person profile for this event
+posthog.capture('signed_up', { plan: 'pro' }, { options: { process_person_profile: false } })
+```
 
 ## Identify
 
@@ -529,7 +542,7 @@ flush
 
 ### `PostHog.alias`
 
-> **alias**(`alias`): `void`
+> **alias**(`alias`, `options?`): `void`
 
 Assigns an alias to the current user.
 
@@ -541,6 +554,7 @@ For example, if a distinct ID used on the frontend is not available in your back
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `alias` | `string` | The alias to assign to the current user |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$create_alias` event |
 
 #### Returns
 
@@ -641,7 +655,7 @@ Numeric values are converted to strings.
 
 ### `PostHog.captureException`
 
-> **captureException**(`error`, `additionalProperties?`, `hint?`): `void`
+> **captureException**(`error`, `additionalProperties?`, `hint?`, `options?`): `void`
 
 Capture a caught exception manually
 
@@ -660,7 +674,8 @@ Override these fields with `additionalProperties`, or remove them using `before_
 | ------ | ------ | ------ |
 | `error` | `unknown` | The error to capture |
 | `additionalProperties?` | `PostHogEventProperties` | Any additional properties to add to the error event |
-| `hint?` | `EventHint` | - |
+| `hint?` | `EventHint` | Optional details about how the error was caught |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$exception` event |
 
 #### Returns
 
@@ -995,12 +1010,11 @@ const distinctId = posthog.getDistinctId()
 Gets the value of a feature flag for the current user.
 
 Returns `true` or `false` for an evaluated boolean flag and a string for a multivariate flag.
-Returns `undefined` before flags load or when loading fails. For backwards compatibility, a
-missing key can resolve to `false` after a non-empty response is stored; use
-`getFeatureFlagResult()` to distinguish an unavailable key from a conclusive off result.
+Returns `undefined` when no evaluation is available, such as before flags load, after a failed
+first load, or for a key that isn't in the loaded flags.
 
-Globally inactive flags are omitted from remote responses, so they follow this missing-key
-behavior rather than carrying an explicit off evaluation.
+Globally inactive flags are omitted from remote responses, so they read as `undefined` rather
+than `false`.
 
 #### Parameters
 
@@ -1013,7 +1027,7 @@ behavior rather than carrying an explicit off evaluation.
 
 `string` \| `boolean` \| `undefined`
 
-The current feature flag value, or undefined if flags are unavailable
+The current feature flag value, or undefined if no evaluation is available
 
 #### Example
 
@@ -1110,14 +1124,17 @@ const payload = result?.payload
 
 ### `PostHog.getAllFeatureFlags`
 
-> **getAllFeatureFlags**(): `FeatureFlagResult`[]
+> **getAllFeatureFlags**(): `FeatureFlagResult`[] \| `undefined`
 
 Returns all currently cached feature flags as `FeatureFlagResult`s. This is a synchronous read of
 the flags from the last load (no network request) and does not send a `$feature_flag_called` event.
 
+Returns `undefined` while no flags are cached, such as before the first successful load or when no
+flags were bootstrapped, and a list, empty when no flags apply, once they are.
+
 #### Returns
 
-`FeatureFlagResult`[]
+`FeatureFlagResult`[] \| `undefined`
 
 ### `useActiveFeatureFlags`
 
@@ -1158,7 +1175,7 @@ Any actual internal use case for the session_id should be handled by the session
 
 ### `PostHog.group`
 
-> **group**(`groupType`, `groupKey`, `properties?`): `void`
+> **group**(`groupType`, `groupKey`, `properties?`, `options?`): `void`
 
 Associates the current user with a group.
 
@@ -1172,6 +1189,7 @@ This is a paid feature and is not available on the open-source or free cloud pla
 | `groupType` | `string` | The type of group (e.g. 'company', 'team') |
 | `groupKey` | `string` | The unique identifier for the group |
 | `properties?` | `PostHogEventProperties` | Optional properties to set for the group |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$groupidentify` event |
 
 #### Returns
 
@@ -1215,14 +1233,17 @@ posthog.group('company', 'company_id_in_your_db', {
 
 > **groupIdentify**(`groupType`, `groupKey`, `groupProperties?`, `options?`): `void`
 
+Sends a `$groupidentify` event that sets properties on a group, without associating the
+current user's events with it. Use `group()` to do both.
+
 #### Parameters
 
-| Parameter | Type |
-| ------ | ------ |
-| `groupType` | `string` |
-| `groupKey` | `string` \| `number` |
-| `groupProperties?` | `PostHogEventProperties` |
-| `options?` | `PostHogCaptureOptions` |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `groupType` | `string` | The type of group (e.g. 'company', 'team') |
+| `groupKey` | `string` \| `number` | The unique identifier for the group |
+| `groupProperties?` | `PostHogEventProperties` | Optional properties to set for the group |
+| `options?` | `PostHogCaptureOptions` | Optional capture options for the `$groupidentify` event |
 
 #### Returns
 
@@ -1232,71 +1253,29 @@ posthog.group('company', 'company_id_in_your_db', {
 
 ### `PostHog.isFeatureEnabled`
 
-> **isFeatureEnabled**(`key`, `options`): `boolean`
+> **isFeatureEnabled**(`key`, `options?`): `boolean`
 
 Checks if a feature flag is enabled for the current user.
 
-A `false` return value means the SDK resolved the current value as off. If no evaluation is
-available, this method returns `defaultValue` when provided. Without a default, it returns
-`undefined` before flags load; for backwards compatibility, a missing key can resolve to
-`false` after a non-empty response is stored.
+Returns `true` when the flag evaluates on and `false` when it evaluates off. When no evaluation is
+available, such as before flags load, after a failed first load, or for a key that isn't in the loaded
+flags, it returns `defaultValue`, or `false` when you don't pass one. Use `getFeatureFlagResult()` to
+tell an unavailable key from a conclusive off result.
 
-Globally inactive flags are omitted from remote responses, so they follow this missing-key
-behavior rather than carrying an explicit off evaluation.
-
-##### Parameters
-
-| Parameter | Type | Description |
-| ------ | ------ | ------ |
-| `key` | `string` | The feature flag key |
-| `options` | `PostHogFeatureFlagOptions` & `object` & `object` | Optional per-call settings |
-
-##### Returns
-
-`boolean`
-
-True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
-
-##### Examples
-
-```js
-// check if feature flag is enabled
-const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
-```
-
-```js
-// fall back to false while flags are not loaded
-const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
-```
-
-#### Call Signature
-
-> **isFeatureEnabled**(`key`, `options?`): `boolean` \| `undefined`
-
-Checks if a feature flag is enabled for the current user.
-
-A `false` return value means the SDK resolved the current value as off. If no evaluation is
-available, this method returns `defaultValue` when provided. Without a default, it returns
-`undefined` before flags load; for backwards compatibility, a missing key can resolve to
-`false` after a non-empty response is stored.
-
-Globally inactive flags are omitted from remote responses, so they follow this missing-key
-behavior rather than carrying an explicit off evaluation.
-
-##### Parameters
+#### Parameters
 
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `key` | `string` | The feature flag key |
 | `options?` | `PostHogIsFeatureEnabledOptions` | Optional per-call settings |
 
-##### Returns
+#### Returns
 
-`boolean` \| `undefined`
+`boolean`
 
-True if the flag evaluates on, false if it evaluates off, or the missing-value fallback described above
+True if the flag evaluates on, false if it evaluates off, or `defaultValue` (`false` unless given) if no evaluation is available
 
-##### Examples
+#### Examples
 
 ```js
 // check if feature flag is enabled
@@ -1304,8 +1283,8 @@ const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag')
 ```
 
 ```js
-// fall back to false while flags are not loaded
-const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: false })
+// fall back to true while flags are not loaded
+const isEnabled = posthog.isFeatureEnabled('key-for-your-boolean-flag', { defaultValue: true })
 ```
 
 ### `useFeatureFlagEnabled`
@@ -1820,7 +1799,7 @@ posthog.setGroupPropertiesForFlags({'company': {'property1': 'value', property2:
 
 ### `PostHog.setPersonProperties`
 
-> **setPersonProperties**(`userPropertiesToSet?`, `userPropertiesToSetOnce?`, `reloadFeatureFlags?`): `void`
+> **setPersonProperties**(`userPropertiesToSet?`, `userPropertiesToSetOnce?`, `reloadFeatureFlags?`, `options?`): `void`
 
 Sets properties on the person profile associated with the current `distinct_id`.
 Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
@@ -1832,6 +1811,7 @@ Learn more about [identifying users](https://posthog.com/docs/product-analytics/
 | `userPropertiesToSet?` | \{\[`key`: `string`\]: `JsonType`; \} | `undefined` | Optional: An object of properties to store about the user. These properties will overwrite any existing values for the same keys. |
 | `userPropertiesToSetOnce?` | \{\[`key`: `string`\]: `JsonType`; \} | `undefined` | Optional: An object of properties to store about the user. If a property is previously set, this does not override that value. |
 | `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after setting the properties. Defaults to true. |
+| `options?` | `PostHogCaptureOptions` | `undefined` | Optional capture options for the `$set` event |
 
 #### Returns
 
@@ -1867,7 +1847,7 @@ posthog.setPersonProperties({ plan: 'premium' }, undefined, false)
 
 ### `PostHog.unsetPersonProperties`
 
-> **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`): `void`
+> **unsetPersonProperties**(`propertyNames`, `reloadFeatureFlags?`, `options?`): `void`
 
 Removes properties from the person profile associated with the current `distinct_id`.
 Learn more about [identifying users](https://posthog.com/docs/product-analytics/identify)
@@ -1878,6 +1858,7 @@ Learn more about [identifying users](https://posthog.com/docs/product-analytics/
 | ------ | ------ | ------ | ------ |
 | `propertyNames` | `string` \| `string`[] | `undefined` | The name (or names) of the person properties to remove. |
 | `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after removing the properties. Defaults to true. |
+| `options?` | `PostHogCaptureOptions` | `undefined` | Optional capture options for the `$set` event |
 
 #### Returns
 
@@ -2489,6 +2470,7 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="set"></a> `$set?` | `PostHogEventProperties` | Properties to set on the person (overrides existing values) |
 | <a id="set_once"></a> `$set_once?` | `PostHogEventProperties` | Properties to set on the person only once (does not override existing values) |
 | <a id="event-1"></a> `event` | `string` | The name of the event |
+| <a id="options"></a> `options?` | `object` | Settings that tell PostHog how to process the event, sent apart from its properties. |
 | <a id="properties"></a> `properties?` | `PostHogEventProperties` | Properties associated with the event (optional to allow compatibility with Node SDK's EventMessage) |
 | <a id="timestamp"></a> `timestamp?` | `Date` | Timestamp for the event |
 | <a id="uuid"></a> `uuid?` | `string` | UUID for the event (optional to allow compatibility with Node SDK's EventMessage). Must be a valid UUID. |
@@ -2543,6 +2525,28 @@ This is the interface exposed to the `before_send` hook, matching the web SDK's 
 | <a id="property-mechanism-1"></a> `mechanism?` | `Partial`\<`Mechanism`\> |
 | <a id="property-skipfirstlines-1"></a> `skipFirstLines?` | `number` |
 | <a id="property-syntheticexception-1"></a> `syntheticException?` | `Error` \| `null` |
+
+### `EventOptions`
+
+> **EventOptions** = `object`
+
+Settings that tell PostHog how to process one event, sent with the event apart from its
+properties. Keys and values are sent as given, including keys this type doesn't list.
+An option wins over its legacy `$process_person_profile`, `$cookieless_mode`, `$ignore_sent_at`
+or `$product_tour_id` property.
+
+#### Indexable
+
+> \[`key`: `string`\]: `JsonType` \| `undefined`
+
+#### Properties
+
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="cookieless_mode"></a> `cookieless_mode?` | `boolean` | Whether PostHog processes this event in cookieless mode. |
+| <a id="disable_skew_correction"></a> `disable_skew_correction?` | `boolean` | Whether PostHog skips correcting this event's timestamp for client clock skew. |
+| <a id="process_person_profile"></a> `process_person_profile?` | `boolean` | Whether PostHog creates or updates a person profile for this event. |
+| <a id="product_tour_id"></a> `product_tour_id?` | `string` | The product tour this event belongs to. |
 
 ### `ExceptionStepsOptions`
 
@@ -2805,6 +2809,18 @@ Log capture types
 
 ### `PostHogCaptureOptions`
 
+> **PostHogCaptureOptions** = `PostHogCaptureOptionsWithEventOptions` & `object`
+
+Options for a call that sends an event, such as `capture()`, `identify()` or `alias()`.
+
+#### Type Declaration
+
+| Name | Type | Description |
+| ------ | ------ | ------ |
+| `options?` | `EventOptions` | Settings that tell PostHog how to process the event. `before_send` can change them through the event's `options`. |
+
+### `PostHogCaptureOptions`
+
 > **PostHogCaptureOptions** = `object`
 
 #### Properties
@@ -2972,7 +2988,7 @@ Per-call settings for `isFeatureEnabled()`.
 
 | Name | Type | Description |
 | ------ | ------ | ------ |
-| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. |
+| `defaultValue?` | `boolean` | Value to return when the flag has no value, e.g. flags have not loaded yet or no flag with that key exists. Defaults to `false`. |
 
 ### `PostHogLogsConfig`
 

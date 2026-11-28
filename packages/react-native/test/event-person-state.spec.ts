@@ -35,10 +35,8 @@ describe('event person state', () => {
       $is_identified: true,
     })
     client.capture('Viewed Dashboard')
-    expect(queued(client, 'Viewed Dashboard').properties).toMatchObject({
-      $process_person_profile: false,
-      $is_identified: false,
-    })
+    expect(queued(client, 'Viewed Dashboard').properties.$is_identified).toBe(false)
+    expect(queued(client, 'Viewed Dashboard').options).toEqual({ process_person_profile: false })
   })
 
   it('lets a registered $process_person_profile win on ordinary events', () => {
@@ -53,7 +51,7 @@ describe('event person state', () => {
     const client = newPostHog()
     client.register({ $process_person_profile: false })
     client.setPersonProperties({ plan: 'pro' })
-    expect(queued(client, '$set').properties.$process_person_profile).toBe(true)
+    expect(queued(client, '$set').properties).not.toHaveProperty('$process_person_profile')
   })
 
   it('leaves a registered personless setting off identity events captured directly', () => {
@@ -61,7 +59,7 @@ describe('event person state', () => {
     client.register({ $process_person_profile: false })
     for (const event of ['$identify', '$create_alias', '$merge_dangerously', '$groupidentify', '$set', '$set_once']) {
       client.capture(event, { distinct_id: 'user-123' })
-      expect(queued(client, event).properties.$process_person_profile).toBe(true)
+      expect(queued(client, event).properties).not.toHaveProperty('$process_person_profile')
     }
   })
 
@@ -71,13 +69,44 @@ describe('event person state', () => {
     expect(queued(client, '$identify').properties.$process_person_profile).toBe(false)
   })
 
-  it('treats a null caller $process_person_profile and $is_identified as unset', () => {
+  it('treats a null caller $process_person_profile as unset', () => {
     const client = newPostHog({ personProfiles: 'never' })
-    client.capture('Signed Up', { $process_person_profile: null, $is_identified: null })
-    expect(queued(client, 'Signed Up').properties).toMatchObject({
-      $process_person_profile: false,
-      $is_identified: false,
+    client.capture('Signed Up', { $process_person_profile: null })
+    expect(queued(client, 'Signed Up').properties).not.toHaveProperty('$process_person_profile')
+    expect(queued(client, 'Signed Up').options).toEqual({ process_person_profile: false })
+  })
+
+  it('sets person processing only as a false option, on personless events, before before_send', () => {
+    const seen: Record<string, unknown> = {}
+    const client = newPostHog({
+      personProfiles: 'identified_only',
+      before_send: (event) => {
+        seen[event!.event] = event!.properties.$process_person_profile
+        return event
+      },
     })
+    client.capture('Viewed Dashboard')
+    expect(queued(client, 'Viewed Dashboard').options).toEqual({ process_person_profile: false })
+    expect(seen).toHaveProperty('Viewed Dashboard', undefined)
+    client.identify('user-123')
+    client.capture('Signed Up')
+    client.capture('Signed In', { $process_person_profile: null })
+    for (const event of ['Signed Up', 'Signed In', '$identify']) {
+      expect(queued(client, event).properties).not.toHaveProperty('$process_person_profile')
+      expect(queued(client, event).options?.process_person_profile).toBeUndefined()
+    }
+  })
+
+  it('sends no $is_identified when the caller or a registered value is null or undefined', () => {
+    const client = newPostHog()
+    client.identify('user-123')
+    client.capture('Signed Up', { $is_identified: null })
+    client.capture('Signed In', { $is_identified: undefined })
+    client.register({ $is_identified: null })
+    client.capture('Viewed Dashboard')
+    for (const event of ['Signed Up', 'Signed In', 'Viewed Dashboard']) {
+      expect(queued(client, event).properties).not.toHaveProperty('$is_identified')
+    }
   })
 
   it('lets a registered $is_identified win over the SDK value', () => {
@@ -115,16 +144,12 @@ describe('event person state', () => {
   it('stamps person processing and $is_identified on $autocapture', () => {
     const client = newPostHog({ personProfiles: 'identified_only' })
     client.autocapture('click', [])
-    expect(queued(client, '$autocapture').properties).toMatchObject({
-      $process_person_profile: false,
-      $is_identified: false,
-    })
+    expect(queued(client, '$autocapture').properties.$is_identified).toBe(false)
+    expect(queued(client, '$autocapture').options).toEqual({ process_person_profile: false })
     client.identify('user-123')
     client.autocapture('click', [])
-    expect(queued(client, '$autocapture').properties).toMatchObject({
-      $process_person_profile: true,
-      $is_identified: true,
-    })
+    expect(queued(client, '$autocapture').properties.$is_identified).toBe(true)
+    expect(queued(client, '$autocapture').properties).not.toHaveProperty('$process_person_profile')
   })
 })
 
