@@ -360,6 +360,146 @@ describe('PostHog RN onFeatureFlags', () => {
         ['empty', false],
       ])
     })
+    // RN 4.x stored a failed or quota-limited first load without the marker 5.0 writes.
+    const storeFlagDetailsAndRestart = async (details: object): Promise<void> => {
+      const previous = newPostHog()
+      await previous.ready()
+      ;(previous as any).setPersistedProperty(PostHogPersistedProperty.FeatureFlagDetails, details)
+      await previous.shutdown()
+      posthog = newPostHog()
+      await posthog.ready()
+    }
+
+    it.each([
+      ['failed', { flags: {}, requestError: { type: 'api_error', statusCode: 500 } }],
+      ['quota-limited', { flags: {}, quotaLimited: ['feature_flags'] }],
+    ])('returns undefined after upgrading from a 4.x %s first load', async (_, details) => {
+      await storeFlagDetailsAndRestart(details)
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+
+      flagsStatus = 500
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getAllFeatureFlags()).toBeUndefined()
+    })
+
+    it('returns the flags a 4.x failed load kept after upgrading', async () => {
+      await storeFlagDetailsAndRestart({
+        flags: { 'beta-ui': { key: 'beta-ui', enabled: true, metadata: {} } },
+        requestError: { type: 'api_error', statusCode: 500 },
+      })
+
+      expect(posthog.getAllFeatureFlags()?.map(({ key }) => key)).toEqual(['beta-ui'])
+    })
+
+    it.each([
+      ['failed', { requestError: { type: 'api_error', statusCode: 500 } }],
+      ['quota-limited', { quotaLimited: ['feature_flags'] }],
+    ])('returns an empty list after upgrading from a 4.x empty load followed by a %s one', async (_, details) => {
+      // RN 4.58+ wrote minimalFlagCalledEvents on every successful load and kept it on later failed ones.
+      await storeFlagDetailsAndRestart({ flags: {}, minimalFlagCalledEvents: false, ...details })
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+    })
+
+    it('keeps an empty list after a restart that follows an empty load and a failed one', async () => {
+      ;(globalThis as any).window.fetch = vi.fn(async () => ({
+        status: flagsStatus,
+        json: () => Promise.resolve({ featureFlags: {} }),
+        text: () => Promise.resolve(''),
+      }))
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+      flagsStatus = 500
+      await posthog.reloadFeatureFlagsAsync()
+      await posthog.shutdown()
+
+      posthog = newPostHog()
+      await posthog.ready()
+
+      expect(posthog.getAllFeatureFlags()).toEqual([])
+    })
+  })
+
+  describe('a flag missing from the loaded flags', () => {
+    it('reads as undefined from getFeatureFlag() and getFeatureFlagResult() once flags load', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.getFeatureFlag('missing')).toBeUndefined()
+      expect(posthog.getFeatureFlagResult('missing')).toBeUndefined()
+    })
+
+    it('reads as false from isFeatureEnabled(), or the default, before and after flags load', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+
+      expect(posthog.isFeatureEnabled('missing')).toBe(false)
+
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.isFeatureEnabled('missing')).toBe(false)
+      expect(posthog.isFeatureEnabled('missing', { defaultValue: true })).toBe(true)
+    })
+
+    it('reads as false from isFeatureEnabled() after a failed first load', async () => {
+      flagsStatus = 500
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.isFeatureEnabled('beta-ui')).toBe(false)
+      expect(posthog.isFeatureEnabled('beta-ui', { defaultValue: true })).toBe(true)
+    })
+
+    it('keeps a loaded flag value winning over the default', async () => {
+      posthog = newPostHog()
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(posthog.isFeatureEnabled('old-ui', { defaultValue: true })).toBe(false)
+      expect(posthog.isFeatureEnabled('checkout')).toBe(true)
+    })
+  })
+
+  describe('/flags requests', () => {
+    const flagsBody = (): any => {
+      const flagsCall = ((globalThis as any).window.fetch as any).mock.calls.find(([url]: [string]) =>
+        url.includes('/flags')
+      )
+      return JSON.parse(flagsCall[1].body)
+    }
+
+    it.each([
+      [
+        'the event $timezone as timezone',
+        (properties: any) => ({ ...properties, $timezone: 'Europe/Berlin' }),
+        'Europe/Berlin',
+      ],
+      [
+        "the JS runtime's time zone as timezone without an event $timezone",
+        ({ $timezone: _, ...properties }: any) => properties,
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ],
+      ['no timezone for a null event $timezone', (properties: any) => ({ ...properties, $timezone: null }), undefined],
+      ['no timezone for a blank event $timezone', (properties: any) => ({ ...properties, $timezone: '' }), undefined],
+    ])('sends %s', async (_, customAppProperties, expected) => {
+      posthog = new PostHog('test-token', {
+        customStorage: mockStorage,
+        flushInterval: 0,
+        preloadFeatureFlags: false,
+        fetchRetryCount: 0,
+        customAppProperties,
+      })
+      await posthog.ready()
+      await posthog.reloadFeatureFlagsAsync()
+
+      expect(flagsBody().timezone).toBe(expected)
+      expect('timezone' in flagsBody()).toBe(expected !== undefined)
+    })
   })
 
   describe('flags whose variant is an empty string', () => {

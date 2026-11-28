@@ -61,6 +61,23 @@ interface PendingFlagsRequest extends FlagsAsyncOptions {
 const resolveSendFeatureFlagEvent = (options?: FeatureFlagResultOptions): boolean | undefined =>
   options?.sendFeatureFlagEvent ?? options?.sendEvent
 
+// Whether stored flag details hold no flags from a successful load or bootstrap. Details stored before
+// the `noFlagsCached` marker existed count as holding none when a failed or quota-limited load left them empty,
+// unless they carry `minimalFlagCalledEvents`, which every successful load has written since RN 4.58.0.
+const holdsNoCachedFlags = (storedDetails: PostHogFlagsStorageFormat): boolean => {
+  if (storedDetails.noFlagsCached !== undefined) {
+    return storedDetails.noFlagsCached
+  }
+  const failedOrQuotaLimited =
+    storedDetails.requestError !== undefined ||
+    storedDetails.quotaLimited?.includes(QuotaLimitedFeature.FeatureFlags) === true
+  return (
+    failedOrQuotaLimited &&
+    storedDetails.minimalFlagCalledEvents === undefined &&
+    Object.keys(storedDetails.flags ?? {}).length === 0
+  )
+}
+
 // The per-event `options` a caller or the SDK passed with the capture options, which capture v1 sends apart from the properties.
 const eventOptionsOf = (options?: PostHogCaptureOptions): { [key: string]: JsonType } | undefined => {
   const eventOptions = (options as { options?: unknown } | undefined)?.options
@@ -964,6 +981,11 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     return this._remoteConfigResponsePromise
   }
 
+  /** The device's IANA time zone, such as `Europe/Berlin`, sent as `timezone` on `/flags` requests. */
+  protected getFlagsRequestTimezone(): string | undefined {
+    return undefined
+  }
+
   // An SDK can discard an obsolete result without recording it as a request failure.
   protected getFlagsForContext(
     ...args: Parameters<PostHogCoreStateless['getFlags']>
@@ -992,6 +1014,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
           $anon_distinct_id: sendAnonDistinctId ? this.getAnonymousId() : undefined,
           // Only set by the React Native SDK; omitted from JSON when DeviceId is not persisted
           $device_id: deviceId ?? undefined,
+          ...maybeAdd('timezone', this.getFlagsRequestTimezone()),
           ...(this.disableRemoteFeatureFlags ? { disable_flags: true } : {}),
         }
 
@@ -1017,7 +1040,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               requestError: result.error,
               minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
-              noFlagsCached: !storedDetails || storedDetails.noFlagsCached === true ? true : undefined,
+              noFlagsCached: !storedDetails || holdsNoCachedFlags(storedDetails),
             })
           }
           return undefined
@@ -1032,7 +1055,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
               flags: this.getKnownFeatureFlagDetails()?.flags ?? {},
               quotaLimited: res.quotaLimited,
               minimalFlagCalledEvents: storedDetails?.minimalFlagCalledEvents,
-              noFlagsCached: !storedDetails || storedDetails.noFlagsCached === true ? true : undefined,
+              noFlagsCached: !storedDetails || holdsNoCachedFlags(storedDetails),
             })
           }
           this._logger.warn(
@@ -1228,7 +1251,8 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
    */
   getAllFeatureFlags(): FeatureFlagResult[] | undefined {
     const flags = this.getFeatureFlagDetails()?.flags
-    if (!flags || this.getStoredFlagDetails()?.noFlagsCached) {
+    const storedDetails = this.getStoredFlagDetails()
+    if (!flags || (storedDetails && holdsNoCachedFlags(storedDetails))) {
       return undefined
     }
     return flagDetailsToResults(
@@ -1350,16 +1374,9 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
   }
 
-  /**
-   * Returns the current feature flag value. For backwards compatibility, a missing key can resolve
-   * to `false` once a non-empty flag response has been stored. Use `getFeatureFlagResult()` when
-   * code must distinguish a conclusive off result from an unavailable key.
-   */
+  /** Returns the current feature flag value, or `undefined` when no evaluation is available for the key. */
   getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
-    const result = this._getFeatureFlagResult(key, {
-      missingFlagBehavior: 'getFeatureFlag',
-      sendEvent: resolveSendFeatureFlagEvent(options),
-    })
+    const result = this._getFeatureFlagResult(key, { sendEvent: resolveSendFeatureFlagEvent(options) })
     return result?.variant ?? result?.enabled
   }
 
@@ -1405,8 +1422,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
 
   /**
    * Returns whether the current feature flag value is enabled. When no evaluation is available,
-   * `defaultValue` is returned if provided; without one, the legacy missing-key behavior of
-   * `getFeatureFlag()` applies.
+   * `defaultValue` is returned if provided; without one, `getFeatureFlag()` decides the result.
    */
   isFeatureEnabled(key: string, options: IsFeatureEnabledOptions & { defaultValue: boolean }): boolean
   isFeatureEnabled(key: string, options?: IsFeatureEnabledOptions): boolean | undefined
@@ -2058,6 +2074,19 @@ export abstract class PostHogCore extends PostHogCoreBase {
         cb(flags)
       }
     })
+  }
+
+  /**
+   * Returns the current feature flag value. For backwards compatibility, a missing key can resolve
+   * to `false` once a non-empty flag response has been stored. Use `getFeatureFlagResult()` when
+   * code must distinguish a conclusive off result from an unavailable key.
+   */
+  getFeatureFlag(key: string, options?: FeatureFlagResultOptions): FeatureFlagValue | undefined {
+    const result = this._getFeatureFlagResult(key, {
+      missingFlagBehavior: 'getFeatureFlag',
+      sendEvent: resolveSendFeatureFlagEvent(options),
+    })
+    return result?.variant ?? result?.enabled
   }
 
   /**
