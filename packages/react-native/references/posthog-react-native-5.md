@@ -1667,21 +1667,45 @@ posthog.reset([
 
 Resets group properties for feature flag evaluation.
 
-#### Parameters
+##### Parameters
 
-| Parameter | Type | Default value | Description |
-| ------ | ------ | ------ | ------ |
-| `reloadFeatureFlags?` | `boolean` | `true` | Whether to reload feature flags after setting the properties. Defaults to true. |
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `reloadFeatureFlags?` | `boolean` | Whether to reload feature flags after setting the properties. Defaults to true. |
 
-#### Returns
+##### Returns
 
 `void`
 
-#### Example
+##### Example
 
 ```js
 // reset group properties for flags
 posthog.resetGroupPropertiesForFlags()
+```
+
+#### Call Signature
+
+> **resetGroupPropertiesForFlags**(`groupType`, `reloadFeatureFlags?`): `void`
+
+Resets the group properties of one group type for feature flag evaluation, keeping other group types.
+
+##### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `groupType` | `string` | The group type whose properties to reset |
+| `reloadFeatureFlags?` | `boolean` | Whether to reload feature flags after resetting the properties. Defaults to true. |
+
+##### Returns
+
+`void`
+
+##### Example
+
+```js
+// reset the company group's properties for flags
+posthog.resetGroupPropertiesForFlags('company')
 ```
 
 ## Reset person properties for flags
@@ -2169,6 +2193,60 @@ Surveys that rely on these conditions don't appear.
 `Element` \| `null`
 
 ## SDK utils
+
+### `PostHog.captureFeatureInteraction`
+
+> **captureFeatureInteraction**(`flag`, `flagVariant?`): `void`
+
+Captures a `$feature_interaction` event when the user interacts with the feature behind a feature flag.
+
+The event carries `feature_flag` and, for multivariate flags, `feature_flag_variant`, and sets the
+person property `$feature_interaction/<flag>` to the variant. Without `flagVariant`, the SDK reads the
+flag's current value without capturing `$feature_flag_called`, and skips the event when the flag has no value.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | The feature flag key |
+| `flagVariant?` | `string` | The variant the user interacted with. Defaults to the flag's current value. |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```js
+<Button onPress={() => posthog.captureFeatureInteraction('new-checkout')} title="Checkout" />
+```
+
+### `PostHog.captureFeatureView`
+
+> **captureFeatureView**(`flag`, `flagVariant?`): `void`
+
+Captures a `$feature_view` event when the user sees the feature behind a feature flag.
+
+The event carries `feature_flag` and, for multivariate flags, `feature_flag_variant`, and sets the
+person property `$feature_view/<flag>` to the variant. Without `flagVariant`, the SDK reads the flag's
+current value without capturing `$feature_flag_called`, and skips the event when the flag has no value.
+
+#### Parameters
+
+| Parameter | Type | Description |
+| ------ | ------ | ------ |
+| `flag` | `string` | The feature flag key |
+| `flagVariant?` | `string` | The variant the user saw. Defaults to the flag's current value. |
+
+#### Returns
+
+`void`
+
+#### Example
+
+```js
+posthog.captureFeatureView('new-checkout')
+```
 
 ### `PostHog.capturePushNotificationOpened`
 

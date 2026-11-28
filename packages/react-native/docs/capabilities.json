@@ -67,6 +67,8 @@
   "useNavigationTracker": "screen",
   "usePostHog": "setup",
   "utils": [
+    "PostHog.captureFeatureInteraction",
+    "PostHog.captureFeatureView",
     "PostHog.capturePushNotificationOpened",
     "PostHog.getDeviceId",
     "PostHog.getSurveyDisplayLanguageOverride",

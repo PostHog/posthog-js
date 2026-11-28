@@ -1577,6 +1577,36 @@ describe('PostHog React Native', () => {
 
         expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
       })
+
+      it('resets only the given group type and reloads feature flags by default', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' }, project: { tier: 'pro' } }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetGroupPropertiesForFlags('company')
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)).toEqual({
+          project: { tier: 'pro' },
+        })
+        await waitForExpect(200, () => {
+          expect((globalThis as any).window.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/flags/'),
+            expect.any(Object)
+          )
+        })
+      })
+
+      it('does not reload feature flags when reloadFeatureFlags is false for a group type', async () => {
+        posthog.setGroupPropertiesForFlags({ company: { name: 'Acme Inc' }, project: { tier: 'pro' } }, false)
+        ;(globalThis as any).window.fetch.mockClear()
+
+        posthog.resetGroupPropertiesForFlags('project', false)
+
+        expect(posthog.getPersistedProperty(PostHogPersistedProperty.GroupProperties)).toEqual({
+          company: { name: 'Acme Inc' },
+        })
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        expect((globalThis as any).window.fetch).not.toHaveBeenCalled()
+      })
     })
 
     describe('reset with propertiesToKeep', () => {

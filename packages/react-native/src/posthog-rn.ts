@@ -2313,6 +2313,76 @@ export class PostHog extends PostHogCoreBase {
   }
 
   /**
+   * Captures a `$feature_view` event when the user sees the feature behind a feature flag.
+   *
+   * The event carries `feature_flag` and, for multivariate flags, `feature_flag_variant`, and sets the
+   * person property `$feature_view/<flag>` to the variant. Without `flagVariant`, the SDK reads the flag's
+   * current value without capturing `$feature_flag_called`, and skips the event when the flag has no value.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * posthog.captureFeatureView('new-checkout')
+   * ```
+   *
+   * @public
+   *
+   * @param flag The feature flag key
+   * @param flagVariant The variant the user saw. Defaults to the flag's current value.
+   */
+  captureFeatureView(flag: string, flagVariant?: string): void {
+    this._captureFeatureEvent('$feature_view', flag, flagVariant)
+  }
+
+  /**
+   * Captures a `$feature_interaction` event when the user interacts with the feature behind a feature flag.
+   *
+   * The event carries `feature_flag` and, for multivariate flags, `feature_flag_variant`, and sets the
+   * person property `$feature_interaction/<flag>` to the variant. Without `flagVariant`, the SDK reads the
+   * flag's current value without capturing `$feature_flag_called`, and skips the event when the flag has no value.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * <Button onPress={() => posthog.captureFeatureInteraction('new-checkout')} title="Checkout" />
+   * ```
+   *
+   * @public
+   *
+   * @param flag The feature flag key
+   * @param flagVariant The variant the user interacted with. Defaults to the flag's current value.
+   */
+  captureFeatureInteraction(flag: string, flagVariant?: string): void {
+    this._captureFeatureEvent('$feature_interaction', flag, flagVariant)
+  }
+
+  private _captureFeatureEvent(
+    event: '$feature_view' | '$feature_interaction',
+    flag: string,
+    flagVariant: string | undefined
+  ): void {
+    // Runs once storage has loaded, so a call during startup reads the persisted or bootstrapped flags.
+    this.wrap(() => {
+      const variant = flagVariant ?? this.getFeatureFlag(flag, { sendFeatureFlagEvent: false })
+      if (variant === undefined) {
+        this._logger.info(`Skipping ${event} for flag "${flag}": the flag has no value.`)
+        return
+      }
+      // The event sets a person property, so it processes the person, as on posthog-ios.
+      this._requirePersonProcessing(
+        `posthog.${event === '$feature_view' ? 'captureFeatureView' : 'captureFeatureInteraction'}`
+      )
+      this.capture(event, {
+        feature_flag: flag,
+        ...(typeof variant === 'string' ? { feature_flag_variant: variant } : {}),
+        $set: { [`${event}/${flag}`]: variant },
+      })
+    })
+  }
+
+  /**
    * Reloads feature flags from the server.
    *
    * PostHog loads feature flags when instantiated and refreshes whenever methods are called that affect the flag.
@@ -2734,8 +2804,40 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  resetGroupPropertiesForFlags(reloadFeatureFlags = true): void {
-    super.resetGroupPropertiesForFlags()
+  resetGroupPropertiesForFlags(reloadFeatureFlags?: boolean): void
+  /**
+   * Resets the group properties of one group type for feature flag evaluation, keeping other group types.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // reset the company group's properties for flags
+   * posthog.resetGroupPropertiesForFlags('company')
+   * ```
+   *
+   * @public
+   *
+   * @param groupType The group type whose properties to reset
+   * @param reloadFeatureFlags Whether to reload feature flags after resetting the properties. Defaults to true.
+   */
+  resetGroupPropertiesForFlags(groupType: string, reloadFeatureFlags?: boolean): void
+  resetGroupPropertiesForFlags(groupTypeOrReloadFeatureFlags?: string | boolean, reloadFeatureFlags = true): void {
+    if (typeof groupTypeOrReloadFeatureFlags === 'string') {
+      const groupType = groupTypeOrReloadFeatureFlags
+      this.wrap(() => {
+        const properties = {
+          ...this.getPersistedProperty<Record<string, Record<string, JsonType>>>(
+            PostHogPersistedProperty.GroupProperties
+          ),
+        }
+        delete properties[groupType]
+        this.setPersistedProperty(PostHogPersistedProperty.GroupProperties, properties)
+      })
+    } else {
+      super.resetGroupPropertiesForFlags()
+      reloadFeatureFlags = groupTypeOrReloadFeatureFlags ?? true
+    }
 
     if (reloadFeatureFlags) {
       this.reloadFeatureFlags()
