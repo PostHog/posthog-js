@@ -343,9 +343,12 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
     }
     // As in native 4.0: the SDK's own properties, then registered and session properties, then the caller's. A
     // per-call `disableGeoip` sits under the caller's `$geoip_disable`. A `null`, `undefined` or blank `$session_id`
-    // counts as unset, and `$lib` and `$lib_version` fill last, as a pair. The SDK session is read only when no id
-    // wins, as getSessionId() can rotate the session.
+    // counts as unset, and `$lib` and `$lib_version` fill last, as a pair. The SDK session is read, which records
+    // session activity and can rotate the session, unless the caller's properties carry a `$session_id`; a
+    // registered `$session_id` still wins for the event.
     const { $lib, $lib_version, ...sdkProperties } = this.getCommonEventProperties()
+    const callerSessionId = userProperties.$session_id
+    const sessionId = isFilledString(callerSessionId) && callerSessionId.trim() ? undefined : this.getSessionId()
     const enriched: PostHogEventProperties = {
       ...sdkProperties,
       ...this.props,
@@ -354,7 +357,7 @@ export abstract class PostHogCoreBase extends PostHogCoreStateless {
       ...userProperties,
     }
     if (!isFilledString(enriched.$session_id) || !enriched.$session_id.trim()) {
-      enriched.$session_id = this.getSessionId()
+      enriched.$session_id = sessionId ?? this.getSessionId()
     }
     fillLibraryIdentity(enriched, $lib, $lib_version)
     return enriched

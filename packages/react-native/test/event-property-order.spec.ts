@@ -125,6 +125,20 @@ describe('event property order', () => {
     expect(client.getPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp)).toBe(lastActivity)
   })
 
+  it('records session activity when a registered $session_id wins', () => {
+    const client = newPostHog()
+    const sessionId = client.getSessionId()
+    const lastActivity = Date.now() - 1000
+    client.setPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp, lastActivity)
+    client.register({ $session_id: 'registered-session' })
+
+    client.capture('Signed Up')
+
+    expect(queued(client, 'Signed Up').properties.$session_id).toBe('registered-session')
+    expect(client.getPersistedProperty(PostHogPersistedProperty.SessionId)).toBe(sessionId)
+    expect(client.getPersistedProperty(PostHogPersistedProperty.SessionLastTimestamp)).toBeGreaterThan(lastActivity)
+  })
+
   it('lets a registered or caller $session_id win for that event, and treats a null or blank one as unset', () => {
     const client = newPostHog()
     const sessionId = client.getSessionId()
