@@ -272,6 +272,7 @@ exports[`PostHog React Native event and request snapshots > snapshots the comple
       "email": "flags@example.com",
       "plan": "pro",
     },
+    "timezone": "UTC",
     "token": "snapshot-project-token",
   },
   "headers": {
