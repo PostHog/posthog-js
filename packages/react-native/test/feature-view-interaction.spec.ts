@@ -27,6 +27,16 @@ describe.each([
   ['captureFeatureView', '$feature_view'],
   ['captureFeatureInteraction', '$feature_interaction'],
 ] as const)('%s', (method, event) => {
+  it('processes the person for an anonymous user, so the person property is set', async () => {
+    const client = newPostHog()
+    await client.ready()
+    client[method]('multi')
+
+    const [message] = queuedEvents(client)
+    expect(message.options?.process_person_profile).not.toBe(false)
+    expect(client.getPersistedProperty(PostHogPersistedProperty.EnablePersonProcessing)).toBe(true)
+  })
+
   it('captures the current variant without $feature_flag_called', async () => {
     const client = newPostHog()
     await client.ready()

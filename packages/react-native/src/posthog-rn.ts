@@ -2363,15 +2363,22 @@ export class PostHog extends PostHogCoreBase {
     flag: string,
     flagVariant: string | undefined
   ): void {
-    const variant = flagVariant ?? this.getFeatureFlag(flag, { sendFeatureFlagEvent: false })
-    if (variant === undefined) {
-      this._logger.info(`Skipping ${event} for flag "${flag}": the flag has no value.`)
-      return
-    }
-    this.capture(event, {
-      feature_flag: flag,
-      ...(typeof variant === 'string' ? { feature_flag_variant: variant } : {}),
-      $set: { [`${event}/${flag}`]: variant },
+    // Runs once storage has loaded, so a call during startup reads the persisted or bootstrapped flags.
+    this.wrap(() => {
+      const variant = flagVariant ?? this.getFeatureFlag(flag, { sendFeatureFlagEvent: false })
+      if (variant === undefined) {
+        this._logger.info(`Skipping ${event} for flag "${flag}": the flag has no value.`)
+        return
+      }
+      // The event sets a person property, so it processes the person, as on posthog-ios.
+      this._requirePersonProcessing(
+        `posthog.${event === '$feature_view' ? 'captureFeatureView' : 'captureFeatureInteraction'}`
+      )
+      this.capture(event, {
+        feature_flag: flag,
+        ...(typeof variant === 'string' ? { feature_flag_variant: variant } : {}),
+        $set: { [`${event}/${flag}`]: variant },
+      })
     })
   }
 
