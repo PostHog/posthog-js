@@ -3286,7 +3286,7 @@ export class PostHog extends PostHogCoreBase {
    * @param properties - Optional dictionary with key:value pairs to set the person properties
    * @param options - Optional capture options
    */
-  identify(distinctId?: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
+  identify(distinctId: string, properties?: PostHogEventProperties, options?: PostHogCaptureOptions): void {
     const previousDistinctId = this.getDistinctId()
 
     // Extract $set_once before super.identify() because core deletes it from the properties object

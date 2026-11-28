@@ -25,6 +25,7 @@ You need to change code or configuration if your app does any of these:
 - relies on `fetchRetryCount` or `fetchRetryDelay` for events, on `flush()` or `shutdown()` rejecting when delivery fails, or on `posthog.on('error')` firing for network errors (see [Event delivery](#event-delivery))
 - sends `$ai_` events, or calls `captureTraceFeedback()` or `captureTraceMetric()` (see [AI events](#ai-events))
 - registers `$is_identified` or `$process_person_profile`, or sends `null` property values (see [Event properties](#event-properties))
+- calls `identify()` without a distinct ID (see [`identify()`](#identify))
 - filters insights on `$used_bootstrap_value` (see [Event properties](#event-properties))
 - sends distinct IDs or event names over 200 UTF-8 bytes, such as a JWT as the distinct ID (see [Event delivery](#event-delivery))
 
@@ -217,6 +218,18 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - Event uuids are sent in lowercase.
 - PostHog drops an event whose distinct ID or name is over 200 UTF-8 bytes (`distinct_id_too_large`, `event_name_too_long`), and `posthog.on('error')` reports it. 4.x capture shortened the distinct ID and kept the event.
 - Each request carries up to 5 MiB of events. A batch that gets a `413` is split and sent again; a single event that gets a `413` is dropped.
+
+## `identify()`
+
+`identify()` takes a required distinct ID, like posthog-ios, posthog-android and posthog_flutter. In 4.x the type let you leave it out: `identify()` did nothing, and `identify(undefined, properties)` set person properties. Call `setPersonProperties()` for that instead.
+
+```ts
+// 4.x
+posthog.identify(undefined, { plan: 'pro' })
+
+// 5.0
+posthog.setPersonProperties({ plan: 'pro' })
+```
 
 ## Event properties
 
