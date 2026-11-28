@@ -273,6 +273,15 @@ function isPostHogFetchRetryableError(err: unknown): err is PostHogFetchHttpErro
   return isPostHogFetchNetworkError(err)
 }
 
+// A stored queue entry `_flushRoute` can send: an object whose `message`, when present, is an object.
+function isWellFormedQueueItem(item: unknown): item is PostHogQueueItem {
+  if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+    return false
+  }
+  const message = (item as PostHogQueueItem).message
+  return message === undefined || (typeof message === 'object' && message !== null && !Array.isArray(message))
+}
+
 function isPostHogEventProperties(value: JsonType | undefined): value is PostHogEventProperties {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
@@ -1711,6 +1720,15 @@ export abstract class PostHogCoreStateless {
   private async _flushRoute(route: string, sentMessages: any[]): Promise<void> {
     const queueKey = this.persistedQueueKeyForRoute(route)
     let queue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
+
+    // Storage can hand back entries that aren't queue items, e.g. after a failed write or a custom storage bug.
+    // Every flush would throw on them, so they are dropped from the stored queue first.
+    const wellFormedQueue = queue.filter(isWellFormedQueueItem)
+    if (wellFormedQueue.length < queue.length) {
+      this._logger.warn(`Dropped ${queue.length - wellFormedQueue.length} malformed event(s) from the stored queue.`)
+      this.setPersistedProperty<PostHogQueueItem[]>(queueKey, wellFormedQueue)
+      queue = wellFormedQueue
+    }
 
     if (!queue.length) {
       return
