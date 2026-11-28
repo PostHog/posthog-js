@@ -2797,8 +2797,40 @@ export class PostHog extends PostHogCoreBase {
    *
    * @param reloadFeatureFlags Whether to reload feature flags after setting the properties. Defaults to true.
    */
-  resetGroupPropertiesForFlags(reloadFeatureFlags = true): void {
-    super.resetGroupPropertiesForFlags()
+  resetGroupPropertiesForFlags(reloadFeatureFlags?: boolean): void
+  /**
+   * Resets the group properties of one group type for feature flag evaluation, keeping other group types.
+   *
+   * {@label Feature flags}
+   *
+   * @example
+   * ```js
+   * // reset the company group's properties for flags
+   * posthog.resetGroupPropertiesForFlags('company')
+   * ```
+   *
+   * @public
+   *
+   * @param groupType The group type whose properties to reset
+   * @param reloadFeatureFlags Whether to reload feature flags after resetting the properties. Defaults to true.
+   */
+  resetGroupPropertiesForFlags(groupType: string, reloadFeatureFlags?: boolean): void
+  resetGroupPropertiesForFlags(groupTypeOrReloadFeatureFlags?: string | boolean, reloadFeatureFlags = true): void {
+    if (typeof groupTypeOrReloadFeatureFlags === 'string') {
+      const groupType = groupTypeOrReloadFeatureFlags
+      this.wrap(() => {
+        const properties = {
+          ...this.getPersistedProperty<Record<string, Record<string, JsonType>>>(
+            PostHogPersistedProperty.GroupProperties
+          ),
+        }
+        delete properties[groupType]
+        this.setPersistedProperty(PostHogPersistedProperty.GroupProperties, properties)
+      })
+    } else {
+      super.resetGroupPropertiesForFlags()
+      reloadFeatureFlags = groupTypeOrReloadFeatureFlags ?? true
+    }
 
     if (reloadFeatureFlags) {
       this.reloadFeatureFlags()
