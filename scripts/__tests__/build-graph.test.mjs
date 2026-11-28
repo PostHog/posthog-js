@@ -2,11 +2,13 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { delimiter, resolve } from 'node:path'
 import { test } from 'node:test'
 
 const root = resolve(import.meta.dirname, '../..')
+const turboBin = createRequire(import.meta.url).resolve('turbo/bin/turbo')
 const readJson = (path) => JSON.parse(readFileSync(resolve(root, path), 'utf8'))
 const rootPackage = readJson('package.json')
 const turbo = readJson('turbo.json')
@@ -15,14 +17,21 @@ const rrwebPackages = globSync(['packages/rrweb/*/package.json', 'packages/rrweb
 }).map(readJson)
 const graphs = new Map()
 
+// Run the JavaScript entry point directly so Node never has to launch a Windows .cmd shim.
+function runTurbo(args, { cwd = root, ...options } = {}) {
+    return execFileSync(process.execPath, [turboBin, ...args], {
+        cwd,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        ...options,
+    })
+}
+
 function dryRun(args) {
     const key = args.join(' ')
     if (!graphs.has(key)) {
-        const output = execFileSync('pnpm', ['exec', 'turbo', ...args, '--dry=json'], {
-            cwd: root,
-            encoding: 'utf8',
+        const output = runTurbo([...args, '--dry=json'], {
             maxBuffer: 8 * 1024 * 1024,
-            stdio: ['ignore', 'pipe', 'pipe'],
         })
         graphs.set(key, JSON.parse(output))
     }
@@ -72,22 +81,26 @@ test('concurrent version generation never exposes an empty module to builds', as
     let running = true
     let incompleteReads = 0
     try {
-        symlinkSync(resolve(root, 'tooling'), resolve(fixture, 'tooling'), 'dir')
+        symlinkSync(resolve(root, 'tooling'), resolve(fixture, 'tooling'), 'junction')
         for (const name of ['node', 'mcp', 'convex', 'web', 'react-native']) {
             const pkg = readJson(`packages/${name}/package.json`)
             const cwd = resolve(fixture, 'packages', name)
             const target = resolve(cwd, name === 'convex' ? 'src/component/version.ts' : 'src/version.ts')
             mkdirSync(resolve(target, '..'), { recursive: true })
             writeFileSync(resolve(cwd, 'package.json'), JSON.stringify({ version: '1.2.3' }))
-            writeFileSync(target, "export const version = '1.2.3'\n")
+            writeFileSync(target, 'export const version = "1.2.2"\n')
             targets.push(target)
             const command = pkg.scripts['generate-version'] ?? pkg.scripts.prebuild
             for (let i = 0; i < 3; i++) {
                 writers.push(
                     new Promise((resolve) => {
-                        const child = spawn(command, { cwd, shell: true, stdio: 'ignore' })
-                        child.on('error', () => resolve(-1))
-                        child.on('exit', resolve)
+                        const child = spawn(command, { cwd, shell: true, stdio: ['ignore', 'ignore', 'pipe'] })
+                        let stderr = ''
+                        child.stderr.setEncoding('utf8').on('data', (chunk) => {
+                            stderr += chunk
+                        })
+                        child.on('error', (error) => resolve(`${name}: ${error.message}`))
+                        child.on('close', (code) => resolve(code === 0 ? 0 : `${name}: exit ${code}\n${stderr}`))
                     })
                 )
             }
@@ -97,7 +110,7 @@ test('concurrent version generation never exposes an empty module to builds', as
         })
         while (running) {
             for (const target of targets) {
-                if (!/^export const version = ['"]1\.2\.3['"]\n$/.test(readFileSync(target, 'utf8'))) {
+                if (!/^export const version = "1\.2\.[23]"\n$/.test(readFileSync(target, 'utf8'))) {
                     incompleteReads++
                 }
             }
@@ -109,7 +122,7 @@ test('concurrent version generation never exposes an empty module to builds', as
         )
         assert.equal(incompleteReads, 0, 'compilers must only see complete version modules')
         for (const target of targets) {
-            assert.match(readFileSync(target, 'utf8'), /^export const version = ['"]1\.2\.3['"]\n$/)
+            assert.equal(readFileSync(target, 'utf8'), 'export const version = "1.2.3"\n')
         }
     } finally {
         await Promise.all(writers)
@@ -161,7 +174,7 @@ test('shared rrweb tooling hashes without Git metadata or installed dependency d
         symlinkSync(
             resolve(fixture, 'installed-vite'),
             resolve(fixture, 'tooling/rrweb-build/node_modules/vite'),
-            'dir'
+            'junction'
         )
         writeFileSync(
             resolve(fixture, 'package.json'),
@@ -189,16 +202,7 @@ test('shared rrweb tooling hashes without Git metadata or installed dependency d
         }
         const task = () => {
             return JSON.parse(
-                execFileSync(
-                    resolve(root, 'node_modules/.bin/turbo'),
-                    ['run', 'build', '--filter=consumer', '--dry=json'],
-                    {
-                        cwd: fixture,
-                        encoding: 'utf8',
-                        stdio: ['ignore', 'pipe', 'pipe'],
-                        timeout: 20_000,
-                    }
-                )
+                runTurbo(['run', 'build', '--filter=consumer', '--dry=json'], { cwd: fixture, timeout: 20_000 })
             ).tasks[0]
         }
         const initial = task()
@@ -244,11 +248,7 @@ test('changing only the loader method generator invalidates the browser build ca
         writeFileSync(control, 'export const marker = true\n')
         const hash = () =>
             JSON.parse(
-                execFileSync(
-                    resolve(root, 'node_modules/.bin/turbo'),
-                    ['run', 'build', '--filter=posthog-js', '--dry=json'],
-                    { cwd: fixture, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 }
-                )
+                runTurbo(['run', 'build', '--filter=posthog-js', '--dry=json'], { cwd: fixture, timeout: 20_000 })
             ).tasks[0].hash
         const initial = hash()
         writeFileSync(control, 'export const marker = false\n')
@@ -436,13 +436,13 @@ test('the root type-check command propagates semantic failures after dependency 
         )
         const source = resolve(fixture, 'packages/sdk/index.ts')
         writeFileSync(source, "import { value } from '../dependency/built'\nconst result: number = value\n")
+        const [command, ...args] = rootPackage.scripts['check-types'].split(' ')
+        assert.equal(command, 'turbo')
         const run = () =>
-            execFileSync('pnpm', ['check-types', '--force'], {
+            runTurbo([...args, '--force'], {
                 cwd: fixture,
-                encoding: 'utf8',
                 timeout: 30_000,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                env: { ...process.env, PATH: `${resolve(root, 'node_modules/.bin')}:${process.env.PATH}` },
+                env: { ...process.env, PATH: `${resolve(root, 'node_modules/.bin')}${delimiter}${process.env.PATH}` },
             })
         assert.throws(run, (error) => {
             assert.notEqual(error.status, 0)
