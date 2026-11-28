@@ -68,7 +68,7 @@ Then run `pod install` in `ios`, or `npx expo prebuild --clean`. Remove `pod 'Po
 `@posthog/react-native-plugin` 3.0 needs React Native 0.75 or later, Xcode 26 or later and iOS 15 or later, and pulls posthog-ios through Swift Package Manager. See its [migration guide](https://github.com/PostHog/posthog-js/blob/main/packages/react-native-plugin/MIGRATION.md) for its own steps.
 
 Without the plugin, session replay, native crash capture and push notification capture stay off. With `debug: true`, the SDK logs this for session replay and native crash capture.
-An installed plugin older than 3.0 is ignored the same way, with a warning that asks you to upgrade it.
+An installed plugin older than 3.0 is ignored the same way, with a warning that asks you to upgrade it. The SDK then doesn't call the native SDK at all, so `reset()` and `optOut()` don't unregister a push token that the native SDK registered under 4.x. Upgrade the plugin before you ship 5.0 if you use push notifications.
 
 ## Personal API keys
 
@@ -116,14 +116,14 @@ If your 4.x code read flags both in the callback and right after registering it,
 
 ### Removed feature flag methods
 
-| 4.x                                                                                          | 5.0                                                                                                                                                                               |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getFeatureFlagPayload(key)`                                                                 | `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`                                                                                                             |
-| `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`              | `getAllFeatureFlags()`, which returns a list of `{ key, enabled, variant, payload }` (see below)                                                                                  |
-| `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => { const value = posthog.getFeatureFlag(key); if (value !== undefined) cb(value) })`                                                                         |
-| `overrideFeatureFlag(overrides)`                                                             | `updateFlags(...)`, with `disableRemoteFeatureFlags: true` so the next load doesn't replace the values. Overrides set with `overrideFeatureFlag()` in 4.x are cleared on upgrade. |
-| `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                           |
-| `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                              |
+| 4.x                                                                                          | 5.0                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getFeatureFlagPayload(key)`                                                                 | `getFeatureFlagResult(key, { sendFeatureFlagEvent: false })?.payload`                                                                                                                                            |
+| `getFeatureFlags()`, `getFeatureFlagPayloads()`, `getFeatureFlagsAndPayloads()`              | `getAllFeatureFlags()`, which returns a list of `{ key, enabled, variant, payload }` (see below)                                                                                                                 |
+| `onFeatureFlag(key, cb)`                                                                     | `onFeatureFlags(() => { const result = posthog.getFeatureFlagResult(key); if (result) cb(result.variant ?? result.enabled) })`. Unlike 4.x, a flag missing from the loaded flags doesn't call `cb` with `false`. |
+| `overrideFeatureFlag(overrides)`                                                             | `updateFlags(...)`, with `disableRemoteFeatureFlags: true` so the next load doesn't replace the values. Overrides set with `overrideFeatureFlag()` in 4.x are cleared on upgrade.                                |
+| `getFeatureFlagDetails()`                                                                    | Internal, left out of the docs, and may change in any release. Use `getAllFeatureFlags()`, or `getFeatureFlagResult(key)` for one flag.                                                                          |
+| `{ sendEvent: false }` on `getFeatureFlag()`, `getFeatureFlagResult()`, `isFeatureEnabled()` | `{ sendFeatureFlagEvent: false }`. TypeScript rejects `sendEvent`; plain JavaScript still accepts it, but rename it.                                                                                             |
 
 ### `getAllFeatureFlags`
 
@@ -211,7 +211,7 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
   posthog.on('error', (err) => report(err.message, (err.drops?.length ?? 0) + (err.retryExhausted?.length ?? 0)))
   ```
 
-- Event uuids are sent in lowercase.
+- Event uuids are sent in lowercase, and a `uuid` you pass that isn't a valid UUID is replaced with a new one.
 - PostHog drops an event whose distinct ID or name is over 200 UTF-8 bytes (`distinct_id_too_large`, `event_name_too_long`), and `posthog.on('error')` reports it. 4.x capture shortened the distinct ID and kept the event.
 - Each request carries up to 5 MiB of events. A batch that gets a `413` is split and sent again; a single event that gets a `413` is dropped.
 
