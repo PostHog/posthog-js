@@ -951,6 +951,24 @@ describe('React Native captureAi', () => {
     expect((client as any)._aiLane._events.map((item: { uuid: string }) => item.uuid)).toHaveLength(1)
   })
 
+  it('warns once even with debug off when the AI endpoint returns 404', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = (request) => (request.path === AI_PATH ? { status: 404 } : { status: 200, body: { results: {} } })
+    const client = await newPostHog({ flushAt: 10 })
+
+    client.captureAi('$ai_generation', { index: 0 })
+    await client.flush()
+    endResendWait(client)
+    await client.flush()
+
+    expect(requests.filter((r) => r.path === AI_PATH)).toHaveLength(2)
+    expect(warn.mock.calls).toEqual([
+      [
+        '[PostHog] /i/v1/ai/events returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/ai/events.',
+      ],
+    ])
+  })
+
   it('drops a single AI event the server rejects with 413', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     respond = (request) => (request.path === AI_PATH ? { status: 413 } : { status: 200, body: { results: {} } })

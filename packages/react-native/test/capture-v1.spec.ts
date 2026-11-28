@@ -1,4 +1,5 @@
 import { PostHog } from '../src'
+import { PostHogPersistedProperty } from '@posthog/core'
 
 type CaptureRequest = { headers: Record<string, string>; body: { batch: { event: string; uuid: string }[] } }
 
@@ -7,7 +8,8 @@ const CAPTURE_PATH = '/i/v1/analytics/events'
 describe('React Native capture v1 delivery', () => {
   const originalFetch = (globalThis as any).window.fetch
   let requests: CaptureRequest[]
-  let respond: (request: CaptureRequest) => { status: number; body?: unknown; headers?: Record<string, string> }
+  type CaptureResponse = { status: number; body?: unknown; headers?: Record<string, string> }
+  let respond: (request: CaptureRequest) => CaptureResponse | Promise<CaptureResponse>
   let posthog: PostHog
 
   beforeAll(() => {
@@ -28,7 +30,7 @@ describe('React Native capture v1 delivery', () => {
       }
       const request = { headers: options.headers, body: JSON.parse(options.body) }
       requests.push(request)
-      const { status, body, headers = {} } = respond(request)
+      const { status, body, headers = {} } = await respond(request)
       return {
         status,
         headers: { get: (name: string) => headers[name] ?? null },
@@ -167,6 +169,115 @@ describe('React Native capture v1 delivery', () => {
     await posthog.flush()
 
     expect(info).toHaveBeenCalledWith('Keeping 1 events to send again: HTTP 404.')
+  })
+
+  it('warns once per status even with debug off when capture returns 404 or 401', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    respond = () => ({ status: 404 })
+    posthog.capture('kept')
+    await posthog.flush()
+    endResendWait()
+    await posthog.flush()
+    respond = () => ({ status: 401 })
+    endResendWait()
+    await posthog.flush()
+    posthog.capture('dropped')
+    await posthog.flush()
+
+    expect(sentEvents()).toEqual([['kept'], ['kept'], ['kept'], ['dropped']])
+    expect(warn.mock.calls).toEqual([
+      [
+        '[PostHog] /i/v1/analytics/events returned 404. Events stay queued and are retried. If you use a reverse proxy or self-host PostHog, make sure it serves /i/v1/analytics/events.',
+      ],
+      [
+        '[PostHog] /i/v1/analytics/events returned 401, events were dropped. If you use a reverse proxy, make sure it forwards the Authorization header.',
+      ],
+    ])
+  })
+
+  it.each([
+    'https://user:secret@proxy.example.com',
+    'https://user:sec@ret@proxy.example.com',
+    'https://me@corp.com:secret@proxy.example.com',
+    'https://proxy.example.com/ingest/secret?token=secret#secret',
+    'https://proxy.example.com\\ingest\\secret',
+    'https://user:secret@proxy.example.com\\ingest',
+    'https://user:secret\\@proxy.example.com',
+  ])('leaves credentials in the host %s out of the 404 warning', async (host) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const client = new PostHog('test-token', {
+      host,
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      disableCompression: true,
+      captureAppLifecycleEvents: false,
+    })
+    await client.ready()
+    respond = () => ({ status: 404 })
+    client.capture('kept')
+    await client.flush()
+    ;(client as any)._captureResendAt = 0
+    await client.shutdown()
+
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[PostHog\] \/i\/v1\/analytics\/events returned 404/))
+    expect(warn.mock.calls.flat().join()).not.toMatch(/sec|ret@|corp|ingest/)
+  })
+
+  it('halves a batch whose request timed out, and resends the halves as new requests', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const client = new PostHog('test-token', {
+      persistence: 'memory',
+      flushInterval: 0,
+      preloadFeatureFlags: false,
+      disableCompression: true,
+      captureAppLifecycleEvents: false,
+      requestTimeout: 20,
+    })
+    await client.ready()
+    respond = (request) =>
+      request.body.batch.length > 1 ? new Promise<never>(() => {}) : { status: 200, body: { results: {} } }
+    client.capture('first')
+    client.capture('second')
+    await client.flush()
+    ;(client as any)._captureResendAt = 0
+    await client.flush()
+    await client.shutdown()
+
+    expect(sentEvents()).toEqual([['first', 'second'], ['first'], ['second']])
+    const [timedOut, firstHalf, secondHalf] = requests.map(requestIdentity)
+    expect(firstHalf.requestId).not.toEqual(timedOut.requestId)
+    expect(secondHalf.requestId).not.toEqual(firstHalf.requestId)
+    expect([firstHalf.attempt, secondHalf.attempt]).toEqual(['1', '1'])
+  })
+
+  it('sends once 5 MiB of events is queued, before flushAt is reached', async () => {
+    const twoMiB = 'x'.repeat(2 * 1024 * 1024)
+    posthog.capture('first', { blob: twoMiB })
+    posthog.capture('second', { blob: twoMiB })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(requests).toEqual([])
+
+    posthog.capture('third', { blob: twoMiB })
+
+    await vi.waitFor(() => expect(sentEvents()).toEqual([['first', 'second'], ['third']]))
+  })
+
+  it('counts malformed stored queue entries as nothing when checking the queued bytes', async () => {
+    ;(posthog as any).setPersistedProperty(PostHogPersistedProperty.Queue, [{ message: 'bad' }, { message: 7 }])
+    const timerErrors: unknown[] = []
+    const onError = (error: unknown): void => {
+      timerErrors.push(error)
+    }
+    process.on('uncaughtException', onError)
+    try {
+      posthog.capture('after-bad-entries')
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    } finally {
+      process.off('uncaughtException', onError)
+    }
+
+    expect(timerErrors).toEqual([])
   })
 
   it('halves a batch that got a 413 and sends the same events', async () => {

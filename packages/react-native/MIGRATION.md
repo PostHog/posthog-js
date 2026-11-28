@@ -39,7 +39,7 @@ posthog-react-native 5.0 sends events to new paths:
 Feature flag, remote config, survey and session replay requests are unchanged.
 
 If you send events to a self-hosted PostHog, check that it serves `/i/v1/analytics/events`, and `/i/v1/ai/events` if you use `captureAi()`, `captureTraceFeedback()` or `captureTraceMetric()`, before you upgrade.
-A `404` keeps events queued: the SDK resends them with backoff until the queue is full, then drops the oldest. A `400`, `401`, `403` or `405` drops them. With `debug: true`, the SDK logs why, such as `HTTP 404`.
+A `404` keeps events queued: the SDK resends them with backoff until the queue is full, then drops the oldest. A `400`, `401`, `403` or `405` drops them. The first `404` and the first `401` from each endpoint print a warning even without `debug: true`, naming the path your proxy must serve or the `Authorization` header it must forward. With `debug: true`, the SDK also logs why it keeps events, such as `HTTP 404`.
 
 If you send events through your own reverse proxy, update it before you upgrade:
 
@@ -216,6 +216,8 @@ For a flag that isn't in the loaded flags, `useFeatureFlagVariantKey()` and `use
 - Event uuids are sent in lowercase.
 - PostHog drops an event whose distinct ID or name is over 200 UTF-8 bytes (`distinct_id_too_large`, `event_name_too_long`), and `posthog.on('error')` reports it. 4.x capture shortened the distinct ID and kept the event.
 - Each request carries up to 5 MiB of events. A batch that gets a `413` is split and sent again; a single event that gets a `413` is dropped.
+- The SDK sends as soon as 5 MiB of events is queued, without waiting for `flushAt`.
+- A batch whose request reaches `requestTimeout` is sent again in batches half the size, so a slow network still delivers it.
 
 ## Event properties
 

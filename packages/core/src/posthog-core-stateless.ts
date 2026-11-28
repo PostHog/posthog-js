@@ -281,9 +281,10 @@ function isPostHogEventProperties(value: JsonType | undefined): value is PostHog
  * What a `sendBatch()` override can resolve with when the transport keeps some events for a later
  * flush. The flush removes the rest of the batch from the queue, keeps the events at `keepIndices`
  * (positions in the batch passed to `sendBatch()`), and stops draining that route until the next
- * flush. `tooLarge` halves the batch size and resends the kept events instead.
+ * flush. `tooLarge` halves the batch size and resends the kept events instead. `timedOut` keeps the
+ * events the same way and halves the batch size for the next flush.
  */
-export type SendBatchOutcome = { keepIndices: readonly number[]; tooLarge?: boolean }
+export type SendBatchOutcome = { keepIndices: readonly number[]; tooLarge?: boolean; timedOut?: boolean }
 
 /**
  * Outcome of a logs batch send. Keeps HTTP error classification inside core so
@@ -348,6 +349,8 @@ export abstract class PostHogCoreStateless {
   readonly preloadFeatureFlags: boolean
   readonly disableSurveys: boolean
   private maxBatchSize: number
+  // The batch size before a timeout lowered it; each delivered batch doubles `maxBatchSize` back towards it.
+  private batchSizeBeforeTimeout: number | undefined
   private maxQueueSize: number
   private flushInterval: number
   private flushPromise: Promise<any> | null = null
@@ -1838,6 +1841,7 @@ export abstract class PostHogCoreStateless {
         if (isPostHogFetchContentTooLargeError(err) && batchMessages.length > 1) {
           // if we get a 413 error, we want to reduce the batch size and try again
           this.maxBatchSize = Math.max(1, Math.floor(batchMessages.length / 2))
+          this.batchSizeBeforeTimeout = undefined
           this._logger.warn(
             `Received 413 when sending batch of size ${batchMessages.length}, reducing batch size to ${this.maxBatchSize}`
           )
@@ -1863,6 +1867,7 @@ export abstract class PostHogCoreStateless {
           await persistQueueChange(keepIndices)
         }
         this.maxBatchSize = Math.max(1, Math.floor(keepIndices.size / 2))
+        this.batchSizeBeforeTimeout = undefined
         this._logger.warn(
           `Received 413 when sending batch of size ${keepIndices.size}, reducing batch size to ${this.maxBatchSize}`
         )
@@ -1870,6 +1875,13 @@ export abstract class PostHogCoreStateless {
       }
 
       if (keepIndices && keepIndices.size > 0) {
+        if (outcome?.timedOut && keepIndices.size > 1) {
+          this.batchSizeBeforeTimeout ??= this.maxBatchSize
+          this.maxBatchSize = Math.max(1, Math.floor(keepIndices.size / 2))
+          this._logger.warn(
+            `Request timed out when sending batch of size ${keepIndices.size}, reducing batch size to ${this.maxBatchSize}`
+          )
+        }
         await persistQueueChange(keepIndices)
         sentMessages.push(...batchMessages.filter((_, index) => !keepIndices.has(index)))
         // The transport asked to wait before sending the kept events again.
@@ -1880,6 +1892,12 @@ export abstract class PostHogCoreStateless {
 
       sentMessages.push(...batchMessages)
       sentFromRoute += batchMessages.length
+      if (this.batchSizeBeforeTimeout !== undefined) {
+        this.maxBatchSize = Math.min(this.batchSizeBeforeTimeout, this.maxBatchSize * 2)
+        if (this.maxBatchSize >= this.batchSizeBeforeTimeout) {
+          this.batchSizeBeforeTimeout = undefined
+        }
+      }
     }
   }
 
