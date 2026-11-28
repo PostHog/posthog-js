@@ -1790,8 +1790,12 @@ export abstract class PostHogCoreStateless {
       const batchMessages = countMessages.slice(0, batchSize)
 
       const persistQueueChange = async (keepIndices?: ReadonlySet<number>): Promise<void> => {
-        const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
         const removedBatchItems = keepIndices ? batchItems.filter((_, index) => !keepIndices.has(index)) : batchItems
+        if (removedBatchItems.length === 0) {
+          await this.flushStorage()
+          return
+        }
+        const refreshedQueue = this.getPersistedProperty<PostHogQueueItem[]>(queueKey) || []
         // The live queue may have overflowed while this batch was in flight. Remove only
         // snapshotted items, by reference first so events sharing a UUID keep their own copy,
         // then by UUID, which survives persistence.
